@@ -1,5 +1,5 @@
 
-# Skin Cancer MNIST: HAM10000
+## Skin Cancer MNIST: HAM10000
 ### A large collection of multi-source dermatoscopic images of pigmented lesions
 Download the data set from https://www.kaggle.com/kmader/skin-cancer-mnist-ham10000 and extract to the folder ```skin-cancer-mnist/```. The resulting directory should contain:
 ```
