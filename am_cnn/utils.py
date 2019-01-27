@@ -71,7 +71,7 @@ class Dataset:
         pass
 
     @staticmethod
-    def augment_data(X, y, num_augment, masks=False):
+    def augment_data(X, y, num_augment, masks=False, seq=None):
         """Static method to augment training data.
 
         Parameters
@@ -81,10 +81,12 @@ class Dataset:
         y : ndarray
             Ground truth array with shape [n_samples, height, width, n_classes] or
             [n_samples, n_classes] or [n_samples].
-        num_train : int
+        num_augment : int
             Amount of desired training data.
-        masks : bool
+        masks : bool, optional
             Indicates whether the ground truth data are masks or not.
+        seq : imgaug Sequential object
+            A custom imgaug Sequential augmentation pipeline.
 
         Returns
         -------
@@ -100,9 +102,9 @@ class Dataset:
         aug_y = y[rand_repeated]
 
         # Create the augmentation sequence
-        # TODO: Augmentation needs to be adjust based in the data set.
-        seq = iaa.Sequential([iaa.Fliplr(.5), iaa.Affine(rotate=(-10, 10)), iaa.Add((-20, 20)),
-                              iaa.GaussianBlur(sigma=(0.0, 1.0)), iaa.ContrastNormalization((.75, 1.25))])
+        if seq is not None:
+            seq = iaa.Sequential([iaa.Fliplr(.5), iaa.Affine(rotate=(-10, 10)), iaa.Add((-20, 20)),
+                                  iaa.GaussianBlur(sigma=(0.0, 1.0)), iaa.ContrastNormalization((.75, 1.25))])
         seq_det = seq.to_deterministic()
 
         # Augment the data
@@ -183,13 +185,13 @@ class Dataset:
         Returns
         -------
         img : ndarray
-            Array of shape [n_patches, height, width, n_channels or n_classes]
+            Array of shape [n_patches, height, width, n_channels]
 
         """
 
         pad_y = image_shape[0] % patch.shape[1]
         pad_x = image_shape[1] % patch.shape[2]
-        img = np.zeros((image_shape[0]+pad_y, image_shape[1]+pad_x, 1))
+        img = np.zeros((image_shape[0]+pad_y, image_shape[1]+pad_x, image_shape[2]))
 
         n_y = int(img.shape[0] / patch.shape[1])
         n_x = int(img.shape[1] / patch.shape[2])
@@ -200,9 +202,9 @@ class Dataset:
                 x2 = (j+1)*patch.shape[2]
                 y1 = i * patch.shape[1]
                 y2 = (i + 1) * patch.shape[1]
-                img[y1:y2, x1:x2, 0] = patch[i*n_x+j, :, :, 0]
+                img[y1:y2, x1:x2, :] = patch[i*n_x+j, :, :, :]
 
-        return img[:image_shape[0], :image_shape[1], 0]
+        return img[:image_shape[0], :image_shape[1], :]
 
     @staticmethod
     def extract_random_positive_patches(mask, patch_shape, num_patches, threshold=False, img=None):
@@ -299,6 +301,27 @@ smooth = 1.
 
 # def binary_crossentropy(y_true, y_pred):
 #     return -K.mean((y_true*K.log(y_pred)) + (1-y_true)*K.log(1-y_pred))
+
+def precision_multiclass(y_true, y_pred):
+    num_classes = K.shape(y_true)[1]
+    precision = []
+    true_labels = K.argmax(y_true, axis=1)
+    pred_labels = K.argmax(y_pred, axis=1)
+    for _class in range(num_classes.eval(session=K.get_session())):
+        precision.append(precision_binary(K.cast(K.equal(true_labels, _class), 'float32'),
+                                          K.cast(K.equal(pred_labels, _class), 'float32')))
+    return K.mean(K.variable(precision))
+
+
+def recall_multiclass(y_true, y_pred):
+    num_classes = K.shape(y_true)[1]
+    recall = []
+    true_labels = K.argmax(y_true, axis=1)
+    pred_labels = K.argmax(y_pred, axis=1)
+    for _class in range(num_classes.eval(session=K.get_session())):
+        recall.append(recall_binary(K.cast(K.equal(true_labels, _class), 'float32'),
+                                          K.cast(K.equal(pred_labels, _class), 'float32')))
+    return K.mean(K.variable(recall))
 
 
 def precision_binary(y_true, y_pred):
@@ -513,6 +536,12 @@ if __name__ == "__main__":
     print("Precision = ", precision_binary(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
     print("Recall = ", recall_binary(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
 
+    # Classification - multiclass
+    y_gt = np.array([[0, 0, 1], [0, 1, 0], [0, 0, 1], [1, 0, 0], [0, 0, 1]])
+    y_out = np.array([[.3, .5, .2], [.2, .7, .1], [.1, .1, .8], [.5, .3, .2], [.6, .3, .1]])
+
+    print("Precision Multi-class = ", precision_multiclass(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
+    print("Precision Multi-class = ", recall_multiclass(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
 
 
 
