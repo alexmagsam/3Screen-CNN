@@ -148,7 +148,7 @@ def unet_small(input_shape, n_classes):
     return model
 
 
-def original_unet(n_classes):
+def unet_original(n_classes):
     """Original U-net architecture proposed by the paper 'U-Net: Convolutional Networks for Biomedical Image Segmentation'.
 
     Ronneberger, Olaf, Philipp Fischer, and Thomas Brox. "U-net: Convolutional networks for biomedical

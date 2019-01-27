@@ -60,8 +60,12 @@ class Model:
 
         """
 
-        if config.MODEL_NAME.lower() == 'u-net':
+        if config.MODEL_NAME.lower() == 'u-net-small':
             self.model = unet_small(config.INPUT_SHAPE, config.NUM_CLASSES)
+        elif config.MODEL_NAME.lower() == 'u-net':
+            self.model = unet(config.INPUT_SHAPE, config.NUM_CLASSES)
+        elif config.MODEL_NAME.lower() == 'u-net-original':
+            self.model = unet_original(config.NUM_CLASSES)
         elif config.MODEL_NAME.lower() == 'inceptionv3':
             self.model = inceptionv3(config.INPUT_SHAPE, config.NUM_CLASSES, config.WEIGHTS)
         else:
@@ -180,8 +184,10 @@ class Model:
                      "AP": average_precision_score(y_test, y_pred)}
         elif y_test.ndim == 2:     # Multi-class classification
             class_predictions = np.argmax(y_pred, axis=1)
-            score = {}
-            print("Does not support multi-class classification yet")
+            test_predictions = np.argmax(y_test, axis=1)
+            score = {"Accuracy": accuracy_score(test_predictions, class_predictions),
+                     "Average Precision": average_precision_score(y_test, y_pred),
+                     "AUC": roc_auc_score(y_test, y_pred)}
         else:
             raise ValueError("Output format not recognized")
 
@@ -261,21 +267,28 @@ class Model:
 
         fig, axes = plt.subplots(nrows, ncols)
 
-        # TODO: only supports single channel
-        axes[0].imshow(img[..., 0], cmap='gray')
+        if img.shape[3] == 1:
+            axes[0].imshow(img[..., 0], cmap='gray')
+        else:
+            axes[0].imshow(img)
         axes[0].set_xticks([])
         axes[0].set_yticks([])
         axes[0].set_title("Image")
 
-        axes[1].imshow(mask_pred >= threshold, cmap='gray')
+        if mask_pred.shape[2] == 1:
+            axes[1].imshow(mask_pred >= threshold, cmap='gray')
+        else:
+            axes[1].imshow(np.argmax(mask_pred, axis=2), cmap='jet')
         axes[1].set_xticks([])
         axes[1].set_yticks([])
-        axes[1].set_title("Predicted")
+        axes[1].set_title("Predicted Mask")
 
         if mask is not None:
-            # TODO: currently only supports single class segmentation and used Jaccard as metric.
-            axes[1].set_title("Predicted - Jaccard Index = {0:.2f}".format(jaccard_np(mask[..., 0], mask_pred)))
-            axes[2].imshow(mask[..., 0], cmap='gray')
+            axes[1].set_title("Predicted - IoU = {0:.2f}".format(jaccard_np(mask, mask_pred)))
+            if mask.shape[2] == 1:
+                axes[2].imshow(mask[..., 0], cmap='gray')
+            else:
+                axes[2].imshow(np.argmax(mask, axis=2), cmap='jet')
             axes[2].set_xticks([])
             axes[2].set_yticks([])
             axes[2].set_title("Ground Truth")
