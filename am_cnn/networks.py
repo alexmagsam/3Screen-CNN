@@ -1,6 +1,7 @@
-from keras.layers import Input, Conv2D, MaxPooling2D, concatenate, Conv2DTranspose, GlobalAveragePooling2D, Dense, Cropping2D
+from keras.layers import Input, Conv2D, MaxPooling2D, concatenate, Conv2DTranspose, GlobalAveragePooling2D, Dense, Cropping2D, Flatten
 from keras.models import Model
 from keras.applications.inception_v3 import InceptionV3
+from keras.applications.vgg16 import VGG16
 
 
 def unet(input_shape, n_classes):
@@ -225,21 +226,69 @@ def unet_original(n_classes):
     return model
 
 
-def inceptionv3(input_shape, num_classes, weights='imagenet'):
-    """
+def inceptionv3(input_shape, n_classes, weights='imagenet'):
+    """Inception archictecture for image classification. 
 
     Szegedy, Christian, et al. "Going deeper with convolutions." Proceedings of the IEEE conference on computer vision
     and pattern recognition. 2015.
+    
+    Parameters
+    ----------
+    input_shape : tuple
+       Shape of the input tensor (height, width, n_channels)
+    n_classes : int
+        Number of predicted classes in the output.
+    weights : str
+        Indicates which weights to use for training. Options are: 'imagenet' or None.
+
+    Returns
+    -------
+    model : Keras Model object
 
     """
+
     base_model = InceptionV3(include_top=False, weights=weights, input_shape=input_shape)
     x = base_model.output
     x = GlobalAveragePooling2D(name='avg_pool')(x)
-    x = Dense(1024, activation='relu', name='dense')(x)
-    if num_classes == 1:
+    # x = Dense(1024, activation='relu', name='dense')(x)
+    if n_classes == 1:
         predictions = Dense(1, activation='sigmoid', name='predictions')(x)
     else:
-        predictions = Dense(num_classes, activation='softmax', name='predictions')(x)
+        predictions = Dense(n_classes, activation='softmax', name='predictions')(x)
+    model = Model(inputs=base_model.input, output=predictions)
+    return model
+
+
+def vgg16(input_shape, n_classes, weights='imagenet'):
+    """VGG16 Architecture for image classification.
+
+    Simonyan, Karen, and Andrew Zisserman. "Very deep convolutional networks for large-scale image recognition."
+    arXiv preprint arXiv:1409.1556 (2014).
+
+    Parameters
+    ----------
+    input_shape : tuple
+       Shape of the input tensor (height, width, n_channels)
+    n_classes : int
+        Number of predicted classes in the output.
+    weights : str
+        Indicates which weights to use for training. Options are: 'imagenet' or None.
+
+    Returns
+    -------
+    model : Keras Model object
+
+    """
+
+    base_model = VGG16(include_top=False, input_shape=input_shape, weights=weights)
+    x = base_model.output
+    x = Flatten()(x)
+    x = Dense(4096, activation='relu')(x)
+    x = Dense(4096, activation='relu')(x)
+    if n_classes == 1:
+        predictions = Dense(1, activation='sigmoid', name='predictions')(x)
+    else:
+        predictions = Dense(n_classes, activation='softmax', name='predictions')(x)
     model = Model(inputs=base_model.input, output=predictions)
     return model
 
