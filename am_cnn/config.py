@@ -39,6 +39,7 @@ class Config:
     LOSS : str
         The loss function to use during training. Valid options are:
             'bce' : binary cross-entropy, used for binary classification or semantic segmentation.
+            'cce' : categorical cross-entropy for multi-class classification.
             'dice' : Dice loss, which is based on the Dice coefficient used for semantic segmentation.
             jaccard' : Jaccard loss, which is based on the Jaccard index used for semantic segmentation.
     OPTIMIZER : dict
@@ -59,8 +60,14 @@ class Config:
         The name of the CNN model to use. Valid options are:
             'u-net' : A popular CNN for semantic segmentation, especially with biomedical images. Works well for a
                       small training set.
+            'u-net-original' : A popular CNN for semantic segmentation, especially with biomedical images. Works well for a
+                               small training set.
+            'u-net-small' : A popular CNN for semantic segmentation, especially with biomedical images. Works well for a
+                           small training set.
             'inceptionv3' : A popular CNN for image classification and a top performer in the Imagenet challenge.
                             Requires a fairly large data set to prevent over-fitting.
+            'vgg16' : A popular CNN for image classification and a top performer in the Imagenet challenge.
+                      Requires a fairly large data set to prevent over-fitting.
 
     """
 

@@ -68,6 +68,8 @@ class Model:
             self.model = unet_original(config.NUM_CLASSES)
         elif config.MODEL_NAME.lower() == 'inceptionv3':
             self.model = inceptionv3(config.INPUT_SHAPE, config.NUM_CLASSES, config.WEIGHTS)
+        elif config.MODEL_NAME.lower() == 'vgg16':
+            self.model = vgg16(config.INPUT_SHAPE, config.NUM_CLASSES, config.WEIGHTS)
         else:
             raise ValueError("Choose a valid model name.")
 
@@ -114,7 +116,7 @@ class Model:
             raise ValueError("Select a valid optimizer")
 
         # Choose the appropriate metrics
-        if config.MODEL_NAME.lower() in ["u-net"]:
+        if config.MODEL_NAME.lower() in ["u-net", "u-net-small", "u-net-original"]:
             metrics = [dice, jaccard, K.binary_crossentropy]
         elif config.NUM_CLASSES == 1:
             metrics = ['accuracy', precision_binary, recall_binary]
