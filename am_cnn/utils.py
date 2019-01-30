@@ -299,9 +299,6 @@ class Dataset:
 smooth = 1.
 
 
-# def binary_crossentropy(y_true, y_pred):
-#     return -K.mean((y_true*K.log(y_pred)) + (1-y_true)*K.log(1-y_pred))
-
 def precision_multiclass(y_true, y_pred):
     num_classes = K.shape(y_true)[1]
     precision = []
@@ -344,6 +341,7 @@ def recall_binary(y_true, y_pred):
     return tp / (tp + fn)
 
 
+# TODO: throws errors for divide by zero
 def binary_crossentropy_np(y_true, y_pred):
     """Numpy metric for computing binary cross-entropy loss.
 
@@ -382,10 +380,11 @@ def jaccard(y_true, y_pred):
         A single value indicating the Jaccard index.
 
     """
-
-    intersection = K.sum(K.abs(y_true * y_pred))
-    sum_ = K.sum(K.abs(y_true) + K.abs(y_pred))
-    return (intersection) / (sum_ - intersection)
+    y_true_f = K.flatten(y_true)
+    y_pred_f = K.flatten(y_pred)
+    intersection = K.sum(y_true_f * y_pred_f)
+    sum_ = K.sum(y_true_f + y_pred_f)
+    return (intersection + smooth) / (sum_ - intersection + smooth)
 
 
 def jaccard_loss(y_true, y_pred):
@@ -448,10 +447,15 @@ def dice(y_true, y_pred):
     K.variable
         A single value indicating the Dice coefficient.
 
+    References
+    ----------
+    https://github.com/jocicmarko/ultrasound-nerve-segmentation
+
     """
-    intersection = K.sum(K.abs(K.flatten(y_true) * K.flatten(y_pred)))
-    sum_ = K.sum(K.abs(K.flatten(y_true))) + K.sum(K.abs(K.flatten(y_pred)))
-    return 2*(intersection+smooth) / (sum_+smooth)
+    y_true_f = K.flatten(y_true)
+    y_pred_f = K.flatten(y_pred)
+    intersection = K.sum(y_true_f * y_pred_f)
+    return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
 
 
 def dice_loss(y_true, y_pred):
