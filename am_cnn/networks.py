@@ -295,5 +295,5 @@ def vgg16(input_shape, n_classes, weights='imagenet'):
 
 if __name__ == "__main__":
 
-    print(unet_small((512, 512, 1), 1).summary())
+    print(unet_small((240, 240, 1), 1).summary())
 

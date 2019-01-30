@@ -117,7 +117,7 @@ class Model:
 
         # Choose the appropriate metrics
         if config.MODEL_NAME.lower() in ["u-net", "u-net-small", "u-net-original"]:
-            metrics = [dice, jaccard, K.binary_crossentropy]
+            metrics = [dice, jaccard]
         elif config.NUM_CLASSES == 1:
             metrics = ['accuracy', precision_binary, recall_binary]
         else:
@@ -173,9 +173,8 @@ class Model:
 
         y_pred = self.model.predict(X_test, batch_size)
 
-        if X_test.shape == y_test.shape:    # Segmentation
-            score = {"BCE": binary_crossentropy_np(y_test, y_pred),
-                     "Dice": dice_np(y_test, y_pred),
+        if X_test.ndim == y_test.ndim:    # Segmentation
+            score = {"Dice": dice_np(y_test, y_pred),
                      "Jaccard": jaccard_np(y_test, y_pred)}
         elif y_test.ndim == 1:     # Binary classification
             score = {"Accuracy": accuracy_score(y_test, y_pred >= 0.5),
