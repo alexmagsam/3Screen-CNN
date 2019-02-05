@@ -2,7 +2,6 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import keras.backend as K
 from keras.optimizers import Adam, SGD, RMSprop
 from keras.callbacks import ModelCheckpoint, LearningRateScheduler, CSVLogger
 from sklearn.metrics import *
@@ -68,30 +67,8 @@ class Model:
             self.model = unet_original(config.NUM_CLASSES)
         elif config.MODEL_NAME.lower() == 'inceptionv3':
             self.model = inceptionv3(config.INPUT_SHAPE, config.NUM_CLASSES, config.WEIGHTS)
-        elif config.MODEL_NAME.lower() == 'vgg16':
-            self.model = vgg16(config.INPUT_SHAPE, config.NUM_CLASSES, config.WEIGHTS)
         else:
             raise ValueError("Choose a valid model name.")
-
-        return self.model.summary()
-
-    def train(self, dataset, config):
-        """Trains the CNN model attribute of the class on the dataset according to the configuration parameter.
-
-        Parameters
-        ---------
-        dataset : Dataset object
-            Provides the training, testing, and validation data for training the CNN.
-        config : Config object
-            Specifies the hyper-parameters of CNN for training including loss function and optimizer specifications.
-
-        """
-
-        # Build the model
-        print(self.build_model(config))
-
-        # Create training directories
-        config.create_training_directories()
 
         # Choose the loss function
         if config.LOSS.lower() == 'bce':
@@ -109,15 +86,17 @@ class Model:
         if config.OPTIMIZER["name"].lower() == 'adam':
             optimizer = Adam(config.LEARNING_RATE, decay=config.OPTIMIZER["decay"])
         elif config.OPTIMIZER["name"].lower() == 'sgd':
-            optimizer = SGD(config.LEARNING_RATE, momentum=config.OPTIMIZER["momentum"], decay=config.OPTIMIZER["decay"])
+            optimizer = SGD(config.LEARNING_RATE, momentum=config.OPTIMIZER["momentum"],
+                            decay=config.OPTIMIZER["decay"])
         elif config.OPTIMIZER["name"].lower() == 'rmsprop':
-            optimizer = RMSprop(config.LEARNING_RATE, epsilon=config.OPTIMIZER["epsilon"], decay=config.OPTIMIZER["decay"])
+            optimizer = RMSprop(config.LEARNING_RATE, epsilon=config.OPTIMIZER["epsilon"],
+                                decay=config.OPTIMIZER["decay"])
         else:
             raise ValueError("Select a valid optimizer")
 
         # Choose the appropriate metrics
-        if config.MODEL_NAME.lower() in ["u-net", "u-net-small", "u-net-original"]:
-            metrics = [dice, jaccard]
+        if config.MODEL_NAME.lower() in ["u-net"]:
+            metrics = [dice, jaccard, K.binary_crossentropy]
         elif config.NUM_CLASSES == 1:
             metrics = ['accuracy', precision_binary, recall_binary]
         else:
@@ -125,6 +104,27 @@ class Model:
 
         # Compile the model
         self.model.compile(optimizer, loss=[loss], metrics=metrics)
+
+        return self.model.summary()
+
+    def train(self, dataset, config, generator=None):
+        """Trains the CNN model attribute of the class on the dataset according to the configuration parameter.
+
+        Parameters
+        ---------
+        dataset : Dataset object
+            Provides the training, testing, and validation data for training the CNN.
+        config : Config object
+            Specifies the hyper-parameters of CNN for training including loss function and optimizer specifications.
+        generator :
+
+        """
+
+        if self.model is None:
+            self.build_model(config)
+
+        # Create training directories
+        config.create_training_directories()
 
         # Create a save path for training
         callbacks = []
@@ -141,12 +141,22 @@ class Model:
             callbacks.append(LearningRateScheduler(schedule))
 
         # Train the model
-        self.model.fit(dataset.X["train"], dataset.y["train"], epochs=config.NUM_EPOCHS, callbacks=callbacks,
-                       validation_data=(dataset.X["validation"], dataset.y["validation"]),
-                       batch_size=config.BATCH_SIZE)
+        if generator is None:
+            self.model.fit(dataset.X["train"], dataset.y["train"], epochs=config.NUM_EPOCHS, callbacks=callbacks,
+                           validation_data=(dataset.X["validation"], dataset.y["validation"]),
+                           batch_size=config.BATCH_SIZE)
+        else:
+            self.model.fit_generator(generator)
 
         # Evaluate the model
-        self.evaluate_test(dataset.X["test"], dataset.y["test"], config.BATCH_SIZE, to_csv=True, save_path=config.CSV_DIR)
+        if dataset.X["test"].any() and dataset.y["test"].any():
+            self.evaluate_test(dataset.X["test"], dataset.y["test"], config.BATCH_SIZE, to_csv=True,
+                               save_path=config.CSV_DIR)
+        elif dataset.X["validation"].any() and dataset.y["validation"].any():
+            self.evaluate_test(dataset.X["validation"], dataset.y["validation"], config.BATCH_SIZE, to_csv=True,
+                               save_path=config.CSV_DIR)
+        else:
+            print("No evaluation data has been provided.")
 
     def evaluate_test(self, X_test, y_test, batch_size, to_csv=False, save_path=''):
         """Measures the performance of the trained CNN on test data.
@@ -173,8 +183,9 @@ class Model:
 
         y_pred = self.model.predict(X_test, batch_size)
 
-        if X_test.ndim == y_test.ndim:    # Segmentation
-            score = {"Dice": dice_np(y_test, y_pred),
+        if X_test.shape == y_test.shape:    # Segmentation
+            score = {"BCE": binary_crossentropy_np(y_test, y_pred),
+                     "Dice": dice_np(y_test, y_pred),
                      "Jaccard": jaccard_np(y_test, y_pred)}
         elif y_test.ndim == 1:     # Binary classification
             score = {"Accuracy": accuracy_score(y_test, y_pred >= 0.5),
@@ -197,6 +208,76 @@ class Model:
             df.to_csv(os.path.join(save_path, 'results.csv'))
 
         return score
+
+    def visualize_class_predicitons(self, X, y=None, class_names=None, threshold=.5, num_predictions=3):
+        """Visualize randomly selected predictions for a CNN trained for classification.
+
+        Parameters
+        ----------
+        X : ndarray
+            An array with shape [n_samples, height, width, n_channels].
+        y : ndarray, optional
+            Ground truth array with shape [n_samples] or [n_samples, n_classes].
+        class_names : list
+            A list containing the names of the classes. The index of the class name corresponds to the class value.
+        threshold : float, optional
+            Threshold to use to convert predicted output to binary output.
+        num_predictions : int, optional
+            The number of random predictions to display.
+
+        """
+
+        random_samples = np.random.randint(0, len(X), num_predictions)
+
+        X_rand = X[random_samples]
+        y_pred = self.model.predict(X_rand)
+        y_pred = np.squeeze(y_pred)
+
+        if y_pred.ndim == 1:
+            class_predictions = (y_pred >= threshold).astype('int')
+        elif y_pred.ndim == 2:
+            class_predictions = np.argmax(y_pred, axis=1).astype('int')
+        else:
+            ValueError("Accepted dimensions are (n_samples, ) or (n_samples, n_classes).")
+
+        # TODO: only ten classes
+        if class_names is None:
+            class_names = [i for i in range(10)]
+
+        if y is not None:
+            y_rand = y[random_samples]
+            if y_rand.ndim == 1:
+                true_class = (y_rand >= threshold).astype('int')
+            elif y_rand.ndim == 2:
+                true_class = np.argmax(y_rand, axis=1).astype('int')
+            else:
+                ValueError("Accepted dimensions are (n_samples, ) or (n_samples, n_classes).")
+
+        ncols = max(num_predictions, 5)
+        nrows = 1
+        fig, axes = plt.subplots(nrows, ncols)
+
+        for idx in range(ncols):
+            axes[idx].imshow(np.squeeze(X_rand[idx]))
+            axes[idx].set_xticks([])
+            axes[idx].set_yticks([])
+
+            if y_pred.ndim == 2:
+                probability = 100*y_pred[idx, class_predictions[idx]]
+            else:
+                probability = 100*y_pred[idx] if class_predictions[idx] == 1 else 100*(1-y_pred[idx])
+
+            if y is not None:
+                title = "Predicted: {:.2f}% {}, True: {}".format(probability,
+                                                                 class_names[class_predictions[idx]],
+                                                                 class_names[true_class[idx]])
+            else:
+                title = "Predicted: {:.2f}% {}".format(probability,
+                                                       class_names[class_predictions[idx]])
+
+            axes[idx].set_title(title, fontsize=8)
+
+        plt.show()
 
     def visualize_patch_segmentation_predictions(self, X, y=None, threshold=0.5, num_predictions=3):
         """Visualize randomly selected predictions for a CNN trained for semantic segmentation.
@@ -294,11 +375,3 @@ class Model:
             axes[2].set_yticks([])
             axes[2].set_title("Ground Truth")
         plt.show()
-
-
-
-
-
-
-
-

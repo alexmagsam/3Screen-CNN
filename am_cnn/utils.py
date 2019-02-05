@@ -299,36 +299,16 @@ class Dataset:
 smooth = 1.
 
 
-def precision_multiclass(y_true, y_pred):
-    num_classes = K.shape(y_true)[1]
-    precision = []
-    true_labels = K.argmax(y_true, axis=1)
-    pred_labels = K.argmax(y_pred, axis=1)
-    for _class in range(num_classes.eval(session=K.get_session())):
-        precision.append(precision_binary(K.cast(K.equal(true_labels, _class), 'float32'),
-                                          K.cast(K.equal(pred_labels, _class), 'float32')))
-    return K.mean(K.variable(precision))
-
-
-def recall_multiclass(y_true, y_pred):
-    num_classes = K.shape(y_true)[1]
-    recall = []
-    true_labels = K.argmax(y_true, axis=1)
-    pred_labels = K.argmax(y_pred, axis=1)
-    for _class in range(num_classes.eval(session=K.get_session())):
-        recall.append(recall_binary(K.cast(K.equal(true_labels, _class), 'float32'),
-                                          K.cast(K.equal(pred_labels, _class), 'float32')))
-    return K.mean(K.variable(recall))
-
-
 def precision_binary(y_true, y_pred):
 
     logical_and = K.cast(K.all(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     logical_or = K.cast(K.any(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     tp = K.sum(logical_and)
     fp = K.sum(logical_or - y_true)
-
-    return tp / (tp + fp)
+    if tp == 0:
+        return 0
+    else:
+        return tp / (tp + fp)
 
 
 def recall_binary(y_true, y_pred):
@@ -338,7 +318,10 @@ def recall_binary(y_true, y_pred):
     tp = K.sum(logical_and)
     fn = K.sum(logical_or - K.cast(K.greater_equal(y_pred, 0.5), 'float32'))
 
-    return tp / (tp + fn)
+    if tp == 0:
+        return 0
+    else:
+        return tp / (tp + fn)
 
 
 # TODO: throws errors for divide by zero
@@ -358,7 +341,8 @@ def binary_crossentropy_np(y_true, y_pred):
         A single value indicating the binary cross-entropy loss
 
     """
-    return -np.mean((y_true*np.log(y_pred) + (1-y_true)*np.log(1-y_pred)))
+    y_pred = np.clip(y_pred, 1e-15, 1 - 1e-15)
+    return -np.mean((y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred)))
 
 
 def jaccard(y_true, y_pred):
@@ -426,7 +410,7 @@ def jaccard_np(y_true, y_pred):
 
     intersection = np.sum(np.abs(y_pred) * y_true)
     sum_ = np.sum(np.abs(y_true)) + np.sum(np.abs(y_pred))
-    return intersection / (sum_ - intersection)
+    return (intersection + smooth) / (sum_ - intersection + smooth)
 
 
 def dice(y_true, y_pred):
@@ -496,7 +480,7 @@ def dice_np(y_true, y_pred):
 
     intersection = np.sum(np.abs(y_pred * y_true))
     sum_ = np.sum(np.abs(y_true)) + np.sum(np.abs(y_pred))
-    return 2 * intersection / sum_
+    return (2 * intersection + smooth) / (sum_ + smooth)
 
 
 ########################################################################################################################
@@ -543,9 +527,6 @@ if __name__ == "__main__":
     # Classification - multiclass
     y_gt = np.array([[0, 0, 1], [0, 1, 0], [0, 0, 1], [1, 0, 0], [0, 0, 1]])
     y_out = np.array([[.3, .5, .2], [.2, .7, .1], [.1, .1, .8], [.5, .3, .2], [.6, .3, .1]])
-
-    print("Precision Multi-class = ", precision_multiclass(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
-    print("Precision Multi-class = ", recall_multiclass(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
 
 
 
