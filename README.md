@@ -12,6 +12,7 @@ A module built with Python 3 and Keras to train convolutional neural networks fo
 * scikit-image
 * imgaug
 * pandas
+* NiBabel (only for brain tumor segmentation script)
 
 ### Installing
 
@@ -26,6 +27,7 @@ pip install Pillow==5.3.0
 pip install scikit-image==0.14.1
 pip install scikit-learn==0.20.1
 pip install tensorflow-gpu==1.12.0
+pip install nibabel==2.3.3
 ```
 
 There are several other steps to installing GPU-enabled Tensorflow. Follow the rest of the steps on https://www.tensorflow.org/install/ for GPU support.
