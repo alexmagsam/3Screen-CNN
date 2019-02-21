@@ -8,29 +8,30 @@ from skimage.transform import resize
 
 sys.path.append('../')
 
-from am_cnn.config import Config
-from am_cnn.utils import Dataset
-from am_cnn.model import Model
+from visikol_cnn.config import Config
+from visikol_cnn.utils import Dataset
+from visikol_cnn.model import Model
 
 
 class SkinCancerConfig(Config):
     DATA_PATH = 'E:\Deep Learning Datasets\skin-cancer-mnist'
     INPUT_SHAPE = (256, 256, 3)
-    LOGS_DIR = '../logs'
-    SAVE_NAME = 'skincancer-vgg16-cce'
+    SAVE_NAME = 'skincancer-inceptionv3-cce'
     LOSS = 'cce'
-    LEARNING_RATE = .001
+    OPTIMIZER = {"name": "Adam", "decay": 0.9, "momentum": 0, "epsilon": 0}
+    LEARNING_RATE = .0005
     BATCH_SIZE = 16
     NUM_CLASSES = 7
-    NUM_EPOCHS = 1
-    MODEL_NAME = 'vgg16'
+    NUM_EPOCHS = 5
+    WEIGHTS = None
+    MODEL_NAME = 'inceptionv3'
     TEST_SPLIT = .2
     VAL_SPLIT = .2
 
 
 class SkinCancerDataset(Dataset):
 
-    label_names = ['akiec', 'bcc', 'bkl', 'df', 'mel', 'nv', 'vasc']
+    class_names = ['akiec', 'bcc', 'bkl', 'df', 'mel', 'nv', 'vasc']
     label_map = {'akiec': 0, 'bcc': 1, 'bkl': 2, 'df': 3, 'mel': 4, 'nv': 5, 'vasc': 6}
 
     def load_data(self, path, input_shape):
@@ -39,17 +40,15 @@ class SkinCancerDataset(Dataset):
         labels = np.array(df['dx'].tolist())
 
         self.X["all"] = np.zeros(((len(files), ) + input_shape), np.float32)
-        self.y["all"] = np.zeros((len(files), len(self.label_names)), np.float32)
+        self.y["all"] = np.zeros((len(files), len(self.class_names)), np.float32)
         for idx, file in enumerate(files):
             if os.path.exists(os.path.join(path, 'HAM10000_images_part_1', file + '.jpg')):
-                jpg = resize(np.array(pil.open(os.path.join(path, 'HAM10000_images_part_1', file + '.jpg'))) / 255,
-                             input_shape, anti_aliasing=True, preserve_range=True)
-                self.X["all"][idx] = jpg.copy()
+                jpg = np.array(pil.open(os.path.join(path, 'HAM10000_images_part_1', file + '.jpg'))).astype(np.float32)
+                self.X["all"][idx] = resize(jpg, input_shape, anti_aliasing=True, preserve_range=True) / 255 * 2 - 1
                 self.y["all"][idx, self.label_map[labels[idx]]] = 1
             elif os.path.exists(os.path.join(path, 'HAM10000_images_part_2', file + '.jpg')):
-                jpg = resize(np.array(pil.open(os.path.join(path, 'HAM10000_images_part_2', file + '.jpg'))) / 255,
-                             input_shape, anti_aliasing=True, preserve_range=True)
-                self.X["all"][idx] = jpg.copy()
+                jpg = np.array(pil.open(os.path.join(path, 'HAM10000_images_part_2', file + '.jpg'))).astype(np.float32)
+                self.X["all"][idx] = resize(jpg, input_shape, anti_aliasing=True, preserve_range=True) / 255 * 2 - 1
                 self.y["all"][idx, self.label_map[labels[idx]]] = 1
             else:
                 raise FileNotFoundError
@@ -62,6 +61,12 @@ class SkinCancerDataset(Dataset):
 
         self.X["all"] = self.X["all"][random_shuffle]
         self.y["all"] = self.y["all"][random_shuffle]
+
+        plt.imshow(self.X["all"][100])
+        plt.show()
+
+        print("min = {}".format(self.X["all"].min()))
+        print("max = {}".format(self.X["all"].max()))
 
 
 if __name__ == "__main__":
@@ -77,3 +82,5 @@ if __name__ == "__main__":
     # Create the Model object and train the model
     model = Model()
     model.train(dataset, config)
+    model.evaluate_test(dataset, config, to_csv=True)
+    model.visualize_class_predictions(dataset.X["test"], dataset.y["test"], class_names=dataset.class_names)

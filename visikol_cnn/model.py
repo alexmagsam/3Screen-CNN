@@ -67,6 +67,8 @@ class Model:
             self.model = unet_original(config.NUM_CLASSES)
         elif config.MODEL_NAME.lower() == 'inceptionv3':
             self.model = inceptionv3(config.INPUT_SHAPE, config.NUM_CLASSES, config.WEIGHTS)
+        elif config.MODEL_NAME.lower() == 'vgg16':
+            self.model = vgg16(config.INPUT_SHAPE, config.NUM_CLASSES, config.WEIGHTS)
         else:
             raise ValueError("Choose a valid model name.")
 
@@ -95,7 +97,7 @@ class Model:
             raise ValueError("Select a valid optimizer")
 
         # Choose the appropriate metrics
-        if config.MODEL_NAME.lower() in ["u-net"]:
+        if config.MODEL_NAME.lower() in ["u-net", "u-net-small"]:
             metrics = [dice, jaccard, K.binary_crossentropy]
         elif config.NUM_CLASSES == 1:
             metrics = ['accuracy', precision_binary, recall_binary]
@@ -107,7 +109,7 @@ class Model:
 
         return self.model.summary()
 
-    def train(self, dataset, config, generator=None):
+    def train(self, dataset, config, train_generator=None, val_generator=None):
         """Trains the CNN model attribute of the class on the dataset according to the configuration parameter.
 
         Parameters
@@ -116,12 +118,15 @@ class Model:
             Provides the training, testing, and validation data for training the CNN.
         config : Config object
             Specifies the hyper-parameters of CNN for training including loss function and optimizer specifications.
-        generator :
+        generator : ImageGenerator object
+        val_generator : ImageGenerator object
 
         """
 
         if self.model is None:
             self.build_model(config)
+        else:
+            print("Model already created")
 
         # Create training directories
         config.create_training_directories()
@@ -131,7 +136,7 @@ class Model:
 
         # Set a  callback for the model to save checkpoints
         filename = 'model.{epoch:02d}-{val_loss:.2f}.hdf5'
-        callbacks.append(ModelCheckpoint(os.path.join(config.MODELS_DIR, filename)))
+        callbacks.append(ModelCheckpoint(os.path.join(config.MODELS_DIR, filename), save_best_only=True))
 
         # Set a callback to log training values to a CSV
         callbacks.append(CSVLogger(os.path.join(config.CSV_DIR, 'training.csv')))
@@ -141,53 +146,48 @@ class Model:
             callbacks.append(LearningRateScheduler(schedule))
 
         # Train the model
-        if generator is None:
+        if train_generator is None and val_generator is None:
             self.model.fit(dataset.X["train"], dataset.y["train"], epochs=config.NUM_EPOCHS, callbacks=callbacks,
                            validation_data=(dataset.X["validation"], dataset.y["validation"]),
                            batch_size=config.BATCH_SIZE)
         else:
-            self.model.fit_generator(generator)
+            self.model.fit_generator(train_generator, steps_per_epoch=train_generator.n // train_generator.batch_size,
+                                     validation_data=val_generator,
+                                     validation_steps=val_generator.n // val_generator.batch_size,
+                                     epochs=config.NUM_EPOCHS, callbacks=callbacks)
 
-        # Evaluate the model
-        if dataset.X["test"].any() and dataset.y["test"].any():
-            self.evaluate_test(dataset.X["test"], dataset.y["test"], config.BATCH_SIZE, to_csv=True,
-                               save_path=config.CSV_DIR)
-        elif dataset.X["validation"].any() and dataset.y["validation"].any():
-            self.evaluate_test(dataset.X["validation"], dataset.y["validation"], config.BATCH_SIZE, to_csv=True,
-                               save_path=config.CSV_DIR)
-        else:
-            print("No evaluation data has been provided.")
-
-    def evaluate_test(self, X_test, y_test, batch_size, to_csv=False, save_path=''):
+    def evaluate_test(self, dataset, config, to_csv=False):
         """Measures the performance of the trained CNN on test data.
 
         Parameters
         ----------
-        X_test : ndarray
-            Test image data as a Numpy array.
-        y_test : ndarray
-            Ground truth test data as a Numpy array.
-        batch_size : int
-            Number of samples in each batch during inference.
+        dataset : Dataset Object
+        config : Config Object
+            Provides parameters for inference
         to_csv : bool, optional
             If True, a csv file will be saved with the calculated metrics.
-        save_path : str, optional
-            Directory to save the csv file in. Only used if to_csv is True.
 
         Returns
         -------
-        score : dict
-            A dictionary containing all of the measured metrics of the trained CNN on the test data.
+        df : Dataframe Object
+            A dataframe containing all of the relevant information from the training session.
 
         """
 
-        y_pred = self.model.predict(X_test, batch_size)
+        if dataset.X["test"].any() and dataset.y["test"].any():
+            X_test = dataset.X["test"]
+            y_test = dataset.y["test"]
+        else:
+            X_test = dataset.X["validation"]
+            y_test = dataset.y["validation"]
 
-        if X_test.shape == y_test.shape:    # Segmentation
+        y_pred = self.model.predict(X_test, config.BATCH_SIZE)
+        if y_test.ndim == 4:    # Segmentation
             score = {"BCE": binary_crossentropy_np(y_test, y_pred),
                      "Dice": dice_np(y_test, y_pred),
                      "Jaccard": jaccard_np(y_test, y_pred)}
         elif y_test.ndim == 1:     # Binary classification
+            y_pred = np.squeeze(y_pred)
             score = {"Accuracy": accuracy_score(y_test, y_pred >= 0.5),
                      "Precision": precision_score(y_test, y_pred >= 0.5),
                      "Recall": recall_score(y_test, y_pred >= 0.5),
@@ -203,13 +203,21 @@ class Model:
         else:
             raise ValueError("Output format not recognized")
 
-        df = pd.DataFrame(score, index=['value'])
+        # Create a dictionary from the dataset and config and update it with the score dictionary
+        summary = training_summary_dict(dataset, config)
+        summary.update(score)
+        df = pd.DataFrame(summary, index=['value'])
+
         if to_csv:
-            df.to_csv(os.path.join(save_path, 'results.csv'))
+            df.to_csv(os.path.join(config.CSV_DIR, 'results.csv'))
 
-        return score
+        return df
 
-    def visualize_class_predicitons(self, X, y=None, class_names=None, threshold=.5, num_predictions=3):
+    def evaluate_test_generator(self, dataset, config, to_csv=False):
+        # TODO: Create this method
+        pass
+
+    def visualize_class_predictions(self, X, y=None, class_names=None, threshold=.5, num_predictions=3):
         """Visualize randomly selected predictions for a CNN trained for classification.
 
         Parameters
@@ -253,7 +261,7 @@ class Model:
             else:
                 ValueError("Accepted dimensions are (n_samples, ) or (n_samples, n_classes).")
 
-        ncols = max(num_predictions, 5)
+        ncols = min(num_predictions, 5)
         nrows = 1
         fig, axes = plt.subplots(nrows, ncols)
 
@@ -285,7 +293,7 @@ class Model:
         Parameters
         ----------
         X : ndarray
-            An array with shape [n_samples, height, width, n_classes].
+            An array with shape [n_samples, height, width, n_channels].
         y : ndarray, optional
             An array with the same shape as X used as the ground truth segmentation.
         threshold : float, optional
@@ -309,18 +317,24 @@ class Model:
         fig, axes = plt.subplots(nrows, ncols)
 
         for idx in range(num_predictions):
-            axes[idx, 0].imshow(X_rand[idx, :, :, 0])
+            axes[idx, 0].imshow(X_rand[idx, :, :, 0], cmap='gray')
             axes[idx, 0].set_xticks([])
             axes[idx, 0].set_yticks([])
 
-            axes[idx, 1].imshow(y_pred[idx, :, :, 0] > threshold)
+            axes[idx, 1].imshow(y_pred[idx, :, :, 0] > threshold, cmap='gray')
             axes[idx, 1].set_xticks([])
             axes[idx, 1].set_yticks([])
 
+            if idx == 0:
+                axes[idx, 0].set_title("Original Image")
+                axes[idx, 1].set_title("Predicted Mask")
+
             if y is not None:
-                axes[idx, 2].imshow(y_rand[idx, :, :, 0])
+                axes[idx, 2].imshow(y_rand[idx, :, :, 0], cmap='gray')
                 axes[idx, 2].set_xticks([])
                 axes[idx, 2].set_yticks([])
+                if idx == 0:
+                    axes[idx, 2].set_title("Ground Truth Mask")
 
         plt.show()
 
@@ -330,7 +344,7 @@ class Model:
         Parameters
         ----------
         img : ndarray
-            An array with shape [height, width, channels] to prefrom the segmentation on.
+            An array with shape [height, width, channels] to perform the segmentation on.
         mask : ndarray, optional
             Ground truth mask to compare the predicted segmentation to.
         threshold : float, optional
@@ -349,7 +363,7 @@ class Model:
 
         fig, axes = plt.subplots(nrows, ncols)
 
-        if img.shape[3] == 1:
+        if img.shape[2] == 1:
             axes[0].imshow(img[..., 0], cmap='gray')
         else:
             axes[0].imshow(img)
@@ -358,7 +372,7 @@ class Model:
         axes[0].set_title("Image")
 
         if mask_pred.shape[2] == 1:
-            axes[1].imshow(mask_pred >= threshold, cmap='gray')
+            axes[1].imshow(np.squeeze(mask_pred >= threshold), cmap='gray')
         else:
             axes[1].imshow(np.argmax(mask_pred, axis=2), cmap='jet')
         axes[1].set_xticks([])
@@ -375,3 +389,11 @@ class Model:
             axes[2].set_yticks([])
             axes[2].set_title("Ground Truth")
         plt.show()
+
+
+
+
+
+
+
+
