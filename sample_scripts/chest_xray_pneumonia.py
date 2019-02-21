@@ -5,28 +5,29 @@ import PIL.Image as pil
 import matplotlib.pyplot as plt
 from skimage.transform import resize
 from skimage.color import gray2rgb
-
 sys.path.append('../')
 
-from am_cnn.config import Config
-from am_cnn.utils import Dataset
-from am_cnn.model import Model
+from visikol_cnn.config import Config
+from visikol_cnn.utils import Dataset
+from visikol_cnn.model import Model
 
 
 class XRayConfig(Config):
     DATA_PATH = 'E:\Deep Learning Datasets\chest-xray-pneumonia'
     INPUT_SHAPE = (512, 512, 3)
-    LOGS_DIR = '../logs'
-    SAVE_NAME = 'xray-inceptionv3-cce'
+    SAVE_NAME = 'xray-inceptionv3-bce'
     LOSS = 'bce'
+    OPTIMIZER = {"name": "Adam", "decay": .9, "momentum": 0, "epsilon": 0}
     LEARNING_RATE = .001
     BATCH_SIZE = 8
     NUM_CLASSES = 1
-    NUM_EPOCHS = 2
+    NUM_EPOCHS = 5
     MODEL_NAME = 'inceptionv3'
 
 
 class XRayDataset(Dataset):
+
+    class_names = ["normal", "pneumonia"]
 
     def load_data(self, path, input_shape):
         # Load the input data
@@ -43,8 +44,8 @@ class XRayDataset(Dataset):
         self.X["train"] = np.zeros(((len(files), ) + input_shape), np.float32)
 
         for idx, file in enumerate(files):
-            self.X["train"][idx] = resize(gray2rgb(np.array(pil.open(file), np.float32) / 255), output_shape=input_shape,
-                                        anti_aliasing=True, preserve_range=True)
+            self.X["train"][idx] = resize(gray2rgb(np.array(pil.open(file), np.float32) / 255 * 2 - 1),
+                                          output_shape=input_shape, anti_aliasing=True, preserve_range=True)
 
             if (idx + 1) % 100 == 0:
                 print("Loading training {} of {}".format(idx + 1, len(files)))
@@ -69,8 +70,8 @@ class XRayDataset(Dataset):
         self.X["validation"] = np.zeros(((len(files),) + input_shape), np.float32)
 
         for idx, file in enumerate(files):
-            self.X["validation"][idx] = resize(gray2rgb(np.array(pil.open(file), np.float32) / 255), output_shape=input_shape,
-                                          anti_aliasing=True, preserve_range=True)
+            self.X["validation"][idx] = resize(gray2rgb(np.array(pil.open(file), np.float32) / 255 * 2 - 1),
+                                               output_shape=input_shape, anti_aliasing=True, preserve_range=True)
 
             if (idx + 1) % 100 == 0:
                 print("Loading validation {} of {}".format(idx + 1, len(files)))
@@ -95,8 +96,8 @@ class XRayDataset(Dataset):
         self.X["test"] = np.zeros(((len(files),) + input_shape), np.float32)
 
         for idx, file in enumerate(files):
-            self.X["test"][idx] = resize(gray2rgb(np.array(pil.open(file), np.float32) / 255), output_shape=input_shape,
-                                               anti_aliasing=True, preserve_range=True)
+            self.X["test"][idx] = resize(gray2rgb(np.array(pil.open(file), np.float32) / 255 * 2 - 1),
+                                         output_shape=input_shape, anti_aliasing=True, preserve_range=True)
 
             if (idx + 1) % 100 == 0:
                 print("Loading test {} of {}".format(idx + 1, len(files)))
@@ -120,3 +121,5 @@ if __name__ == "__main__":
     # Create the Model object and train the model
     model = Model()
     model.train(dataset, config)
+    model.evaluate_test(dataset, config, to_csv=True)
+    model.visualize_class_predictions(dataset.X["validation"], dataset.y["validation"], class_names=dataset.class_names)

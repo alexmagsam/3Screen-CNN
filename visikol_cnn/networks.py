@@ -293,7 +293,3 @@ def vgg16(input_shape, n_classes, weights='imagenet'):
     return model
 
 
-if __name__ == "__main__":
-
-    print(unet_small((240, 240, 1), 1).summary())
-

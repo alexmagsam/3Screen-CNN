@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from imgaug import augmenters as iaa
 from sklearn.model_selection import train_test_split
 from keras import backend as K
@@ -40,6 +41,10 @@ class Dataset:
                 An array that stores the ground truth data for testing.
             'validation' : ndarray
                 An array that stores the ground truth data for validation.
+    label_map : dict
+        A dictionary that uses class names as keys and integers as values to represent classes. Ex. {'dog':0, 'cat':1}
+    class_names : list
+        A list of class names. Order matters, each class name must be at the index that matches the enumerated class value.
 
     Methods
     -------
@@ -56,6 +61,9 @@ class Dataset:
 
     X = {"all": np.array([]), "full": np.array([]), "train": np.array([]), "test": np.array([]), "validation": np.array([])}
     y = {"all": np.array([]), "train": np.array([]), "test": np.array([]), "validation": np.array([])}
+    generator = {"train": None, "test": None, "validation": None}
+    label_map = {}
+    class_names = []
 
     def __init__(self):
         pass
@@ -70,9 +78,22 @@ class Dataset:
         """
         pass
 
+    def load_generator(self, **kwargs):
+        """A method to load data into the generator attribute of the subclass.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            A dictionary containing parameters specific to the overridden function for loading data.
+        """
+        pass
+
     @staticmethod
     def augment_data(X, y, num_augment, masks=False, seq=None):
         """Static method to augment training data.
+
+        Important note: Use unsigned 8-bit format, this format is supported much better. Float values often yield
+        strange results.
 
         Parameters
         ----------
@@ -102,18 +123,19 @@ class Dataset:
         aug_y = y[rand_repeated]
 
         # Create the augmentation sequence
-        if seq is not None:
-            seq = iaa.Sequential([iaa.Fliplr(.5), iaa.Affine(rotate=(-10, 10)), iaa.Add((-20, 20)),
-                                  iaa.GaussianBlur(sigma=(0.0, 1.0)), iaa.ContrastNormalization((.75, 1.25))])
+        if seq is None:
+            seq = iaa.Sequential([iaa.Fliplr(.5), iaa.ContrastNormalization((.8, 1.2)),
+                                  iaa.Add((-10, 10)), iaa.Multiply((.8, 1.1)), iaa.AdditiveGaussianNoise(scale=(0, 8))])
         seq_det = seq.to_deterministic()
 
         # Augment the data
         aug_X = seq_det.augment_images(aug_X)
         if masks:
             aug_y = seq_det.augment_images(aug_y)
+
         return np.concatenate((X, aug_X), 0), np.concatenate((y, aug_y), 0)
 
-    def split_data(self, test_size, validation_size=None):
+    def split_data(self, test_size=None, validation_size=None):
         """Splits all of the data into training/testing or training/testing/validation data
 
         Parameters
@@ -124,16 +146,28 @@ class Dataset:
             A ratio of amount of validation data to all of the data.
 
         """
-
-        if validation_size is None:
+        split = False
+        if validation_size is None and test_size is not None:
             self.X["train"], self.X["test"], self.y["train"], self.y["test"] = train_test_split(self.X["all"],
                                                                                                 self.y["all"],
                                                                                                 test_size=test_size)
-        else:
+            split = True
+        elif validation_size is not None and test_size is None:
+            self.X["train"], self.X["validation"], self.y["train"], self.y["validation"] = \
+                train_test_split(self.X["all"], self.y["all"], test_size=test_size)
+            split = True
+        elif validation_size is not None and test_size is not None:
             self.X["train"], X_remainder, self.y["train"], y_remainder = \
                 train_test_split(self.X["all"], self.y["all"], test_size=test_size+validation_size)
             self.X["test"], self.X["validation"], self.y["test"], self.y["validation"] = \
                 train_test_split(X_remainder, y_remainder, test_size=validation_size/(validation_size+test_size))
+            split = True
+        else:
+            print("No data has been split.")
+
+        if split:
+            self.X["all"] = np.array([])
+            self.y["all"] = np.array([])
 
     @staticmethod
     def deconstruct_image(img, patch_shape):
@@ -144,7 +178,7 @@ class Dataset:
         img : ndarray
             Array of shape [height, width, n_channels].
         patch_shape : ndarray or tuple
-            Array of shape [height, width, n_channels or n_classes]
+            Array of shape [height, width, n_channels]
 
         Returns
         -------
@@ -152,8 +186,8 @@ class Dataset:
             Array of shape [n_patches, height, width, n_channels or n_classes]
 
         """
-        pad_y = img.shape[0] % patch_shape[0]
-        pad_x = img.shape[1] % patch_shape[1]
+        pad_y = 0 if img.shape[0] % patch_shape[0] == 0 else patch_shape[0] - img.shape[0] % patch_shape[0]
+        pad_x = 0 if img.shape[1] % patch_shape[1] == 0 else patch_shape[1] - img.shape[1] % patch_shape[0]
         img = np.pad(img, ((0, pad_y), (0, pad_x), (0, 0)), 'constant')
 
         n_y = int(img.shape[0] / patch_shape[0])
@@ -167,7 +201,7 @@ class Dataset:
                 x2 = (j+1)*patch_shape[1]
                 y1 = i * patch_shape[0]
                 y2 = (i + 1) * patch_shape[0]
-                patch[i*n_x+j, :, :, 0] = img[y1:y2, x1:x2, 0]
+                patch[i*n_x+j, :, :, :] = img[y1:y2, x1:x2, :]
 
         return patch
 
@@ -178,19 +212,19 @@ class Dataset:
         Parameters
         ----------
         patch : ndarray
-            Array of shape [n_patches, height, width, n_channels or n_classes].
+            Array of shape [n_patches, height, width, n_channels].
         image_shape : ndarray or tuple
-            Array of shape [height, width, n_channels or n_classes]
+            Array of shape [height, width, n_channels]
 
         Returns
         -------
         img : ndarray
-            Array of shape [n_patches, height, width, n_channels]
+            Array of shape [height, width, n_channels]
 
         """
 
-        pad_y = image_shape[0] % patch.shape[1]
-        pad_x = image_shape[1] % patch.shape[2]
+        pad_y = 0 if image_shape[0] % patch.shape[1] == 0 else patch.shape[1] - image_shape[0] % patch.shape[1]
+        pad_x = 0 if image_shape[1] % patch.shape[2] == 0 else patch.shape[2] - image_shape[1] % patch.shape[2]
         img = np.zeros((image_shape[0]+pad_y, image_shape[1]+pad_x, image_shape[2]))
 
         n_y = int(img.shape[0] / patch.shape[1])
@@ -207,22 +241,27 @@ class Dataset:
         return img[:image_shape[0], :image_shape[1], :]
 
     @staticmethod
-    def extract_random_positive_patches(mask, patch_shape, num_patches, threshold=False, img=None):
+    def extract_random_positive_patches(mask, patch_shape, num_patches, threshold=False, img=None, exit_density=False,
+                                        positive_only=True):
         """Extracts patches from an image only at locations where mask is True.
 
         Parameters
         ---------
-        img : ndarray
-            Array to extract patches from of shape [height, width, n_channels].
-        patch_shape : tuple
-            Shape of the patches to be extracted of shape (height, width, n_channels).
         mask : ndarray
             Binary array of shape [height, width] where each pixel is represented by True or False.
+        patch_shape : tuple
+            Shape of the patches to be extracted of shape (height, width, n_channels).
         num_patches : int
             Number of positive patches to extract from the entire image.
-        threshold : float
+        threshold : float, False
             A ratio of (True pixels / total pixels) that is used to determine if a patch is considered positive. If
             False, there only needs to be one true pixel.
+        img : ndarray, None
+            Image to extract the patches from.
+        exit_density : float, False
+            Future parameter for determining when to stop extracting patches.
+        positive_only : bool, False
+            Set False if you want to extract empty patches as well.
 
         Returns
         -------
@@ -232,6 +271,9 @@ class Dataset:
             a list [x1, y1, x2, y2].
 
         """
+
+        if patch_shape[0] % 2 != 0 or patch_shape[1] % 2 != 0:
+            raise ValueError("Only even dimensions are allowed")
 
         # Find indices where mask is True
         positive_idxs = np.transpose(mask.nonzero())
@@ -248,8 +290,13 @@ class Dataset:
 
             valid_bbox = False
             while not valid_bbox:
-                rand_idx = np.random.randint(0, positive_idxs.shape[0], 1)
-                rand_pt = np.squeeze(positive_idxs[rand_idx])
+
+                if positive_only:
+                    rand_idx = np.random.randint(0, positive_idxs.shape[0])
+                    rand_pt = positive_idxs[rand_idx]
+                else:
+                    rand_pt = (np.random.randint(0, mask.shape[0]), np.random.randint(0, mask.shape[1]))
+
                 x1 = rand_pt[1] - int(patch_shape[1] / 2)
                 y1 = rand_pt[0] - int(patch_shape[0] / 2)
                 x2 = rand_pt[1] + int(patch_shape[1] / 2)
@@ -286,6 +333,7 @@ class Dataset:
 
     @staticmethod
     def extract_patches_from_list(img, bbox_list):
+        # TODO: add docstrings
         bbox = bbox_list[0]
         patch = np.zeros((len(bbox_list), bbox[3]-bbox[1], bbox[2]-bbox[0], img.shape[2]), img.dtype)
         for idx, bbox in enumerate(bbox_list):
@@ -299,36 +347,13 @@ class Dataset:
 smooth = 1.
 
 
-def precision_multiclass(y_true, y_pred):
-    num_classes = K.shape(y_true)[1]
-    precision = []
-    true_labels = K.argmax(y_true, axis=1)
-    pred_labels = K.argmax(y_pred, axis=1)
-    for _class in range(num_classes.eval(session=K.get_session())):
-        precision.append(precision_binary(K.cast(K.equal(true_labels, _class), 'float32'),
-                                          K.cast(K.equal(pred_labels, _class), 'float32')))
-    return K.mean(K.variable(precision))
-
-
-def recall_multiclass(y_true, y_pred):
-    num_classes = K.shape(y_true)[1]
-    recall = []
-    true_labels = K.argmax(y_true, axis=1)
-    pred_labels = K.argmax(y_pred, axis=1)
-    for _class in range(num_classes.eval(session=K.get_session())):
-        recall.append(recall_binary(K.cast(K.equal(true_labels, _class), 'float32'),
-                                          K.cast(K.equal(pred_labels, _class), 'float32')))
-    return K.mean(K.variable(recall))
-
-
 def precision_binary(y_true, y_pred):
 
     logical_and = K.cast(K.all(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     logical_or = K.cast(K.any(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     tp = K.sum(logical_and)
     fp = K.sum(logical_or - y_true)
-
-    return tp / (tp + fp)
+    return K.switch(K.equal(tp, K.variable(0)), K.variable(0), tp / (tp + fp))
 
 
 def recall_binary(y_true, y_pred):
@@ -337,11 +362,9 @@ def recall_binary(y_true, y_pred):
     logical_or = K.cast(K.any(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     tp = K.sum(logical_and)
     fn = K.sum(logical_or - K.cast(K.greater_equal(y_pred, 0.5), 'float32'))
+    return K.switch(K.equal(tp, K.variable(0)), K.variable(0), tp / (tp + fn))
 
-    return tp / (tp + fn)
 
-
-# TODO: throws errors for divide by zero
 def binary_crossentropy_np(y_true, y_pred):
     """Numpy metric for computing binary cross-entropy loss.
 
@@ -358,6 +381,7 @@ def binary_crossentropy_np(y_true, y_pred):
         A single value indicating the binary cross-entropy loss
 
     """
+    y_pred = np.clip(y_pred, 1e-6, 1-1e-6)
     return -np.mean((y_true*np.log(y_pred) + (1-y_true)*np.log(1-y_pred)))
 
 
@@ -384,7 +408,7 @@ def jaccard(y_true, y_pred):
     y_pred_f = K.flatten(y_pred)
     intersection = K.sum(y_true_f * y_pred_f)
     sum_ = K.sum(y_true_f + y_pred_f)
-    return (intersection + smooth) / (sum_ - intersection + smooth)
+    return K.switch(K.equal(sum_ - intersection, K.variable(0)), K.variable(0), intersection / (sum_ - intersection))
 
 
 def jaccard_loss(y_true, y_pred):
@@ -404,7 +428,7 @@ def jaccard_loss(y_true, y_pred):
 
     """
 
-    return 1 - jaccard(y_true, y_pred)
+    return -jaccard(y_true, y_pred)
 
 
 def jaccard_np(y_true, y_pred):
@@ -426,7 +450,8 @@ def jaccard_np(y_true, y_pred):
 
     intersection = np.sum(np.abs(y_pred) * y_true)
     sum_ = np.sum(np.abs(y_true)) + np.sum(np.abs(y_pred))
-    return intersection / (sum_ - intersection)
+    jc = intersection / (sum_ - intersection) if sum_ - intersection != 0 else 0
+    return jc
 
 
 def dice(y_true, y_pred):
@@ -455,7 +480,8 @@ def dice(y_true, y_pred):
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
     intersection = K.sum(y_true_f * y_pred_f)
-    return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
+    return K.switch(K.equal((K.sum(y_true_f) + K.sum(y_pred_f)), K.variable(0)), K.variable(0),
+                    (2. * intersection) / (K.sum(y_true_f) + K.sum(y_pred_f)))
 
 
 def dice_loss(y_true, y_pred):
@@ -474,7 +500,7 @@ def dice_loss(y_true, y_pred):
         A single value indicating the Dice loss.
 
     """
-    return 1 - dice(y_true, y_pred)
+    return -dice(y_true, y_pred)
 
 
 def dice_np(y_true, y_pred):
@@ -496,7 +522,8 @@ def dice_np(y_true, y_pred):
 
     intersection = np.sum(np.abs(y_pred * y_true))
     sum_ = np.sum(np.abs(y_true)) + np.sum(np.abs(y_pred))
-    return 2 * intersection / sum_
+    dc = (2 * intersection) / sum_ if sum_ != 0 else 0
+    return dc
 
 
 ########################################################################################################################
@@ -523,29 +550,19 @@ def schedule(epoch):
     return lr
 
 ########################################################################################################################
+# Miscellaneous
 
 
-if __name__ == "__main__":
+def training_summary_dict(dataset, config):
+    return {"date": config.DATE_STRING, "num train": len(dataset.X["train"]), "num test": len(dataset.X["test"]),
+            "num validation": len(dataset.X["validation"]), "model name": config.MODEL_NAME,
+            "loss": config.LOSS, "optimizer": config.OPTIMIZER["name"], "learning rate": config.LEARNING_RATE,
+            "decay": config.OPTIMIZER["decay"], "momentum": config.OPTIMIZER["momentum"],
+            "epsilon": config.OPTIMIZER["epsilon"], "num epochs": config.NUM_EPOCHS,
+            "num classes": config.NUM_CLASSES}
 
-    # Segmentation
-    # y_gt = np.expand_dims(np.array([[[1, 0, 1], [0, 1, 0], [1, 0, 1]],
-    #                                [[0, 1, 0], [1, 0, 1], [0, 1, 0]]], np.float64), axis=3)
-    # y_out = np.expand_dims(np.array([[[0.9, 0.1, 0.9], [.9, 0.1, 0.75], [0.9, 0.8, 0.6]],
-    #                                 [[0.2, 0.7, 0.3], [.9, 0.2, 0.95], [0.2, 0.8, 0.4]]]), axis=3)
 
-    # Classification - binary
-    y_gt = np.array([1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1])
-    y_out = np.array([.9, .1, .2, .45, .3, .1, .1, .8, .6, .75, .4, .55])
-
-    print("Precision = ", precision_binary(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
-    print("Recall = ", recall_binary(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
-
-    # Classification - multiclass
-    y_gt = np.array([[0, 0, 1], [0, 1, 0], [0, 0, 1], [1, 0, 0], [0, 0, 1]])
-    y_out = np.array([[.3, .5, .2], [.2, .7, .1], [.1, .1, .8], [.5, .3, .2], [.6, .3, .1]])
-
-    print("Precision Multi-class = ", precision_multiclass(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
-    print("Precision Multi-class = ", recall_multiclass(K.variable(y_gt), K.variable(y_out)).eval(session=K.get_session()))
+########################################################################################################################
 
 
 

@@ -6,23 +6,23 @@ import matplotlib.pyplot as plt
 
 sys.path.append('../')
 
-from am_cnn.config import Config
-from am_cnn.utils import Dataset
-from am_cnn.model import Model
+from visikol_cnn.config import Config
+from visikol_cnn.utils import Dataset
+from visikol_cnn.model import Model
 
 
 class BrainTumorConfig(Config):
     DATA_PATH = r'E:\Deep Learning Datasets\brain-tumor-segmentation\MICCAI_BraTS_2018_Data_Training'
     INPUT_SHAPE = (240, 240, 1)
     LOGS_DIR = '../logs'
-    SAVE_NAME = 'braintumor-unet-small-dice'
+    SAVE_NAME = 'braintumor-unet-dice'
     LOSS = 'dice'
-    LEARNING_RATE = .0005
-    OPTIMIZER = {"name": 'sgd', 'momentum': .99, 'decay': 0}
+    LEARNING_RATE = .05
+    OPTIMIZER = {"name": 'Adam', 'momentum': .99, 'decay': .9}
     BATCH_SIZE = 16
     NUM_CLASSES = 4
     NUM_EPOCHS = 10
-    MODEL_NAME = 'u-net-small'
+    MODEL_NAME = 'u-net'
     TEST_SPLIT = .2
     VAL_SPLIT = .2
 
@@ -36,7 +36,8 @@ class BrainTumorDataset(Dataset):
         hgg_folders = [os.path.join(path + '\HGG', folder) for folder in hgg_folders]
         lgg_folders = next(os.walk(path + '\LGG'))[1]
         lgg_folders = [os.path.join(path + '\LGG', folder) for folder in lgg_folders]
-        folders = lgg_folders + hgg_folders
+        folders = np.array(lgg_folders + hgg_folders)
+        np.random.shuffle(folders)
 
         self.X["all"] = np.zeros(((1, ) + input_shape), np.float32)
         self.y["all"] = np.zeros((1, input_shape[0], input_shape[1], 4), np.float32)
@@ -92,7 +93,7 @@ class BrainTumorDataset(Dataset):
         rand_shuffle = np.arange(len(self.X["all"]))
         np.random.shuffle(rand_shuffle)
 
-        self.X["all"] = self.X["all"][rand_shuffle] / self.X["all"].max()
+        self.X["all"] = (self.X["all"][rand_shuffle] / self.X["all"].max()) * 2 - 1
         self.y["all"] = self.y["all"][rand_shuffle]
 
 
@@ -103,10 +104,11 @@ if __name__ == "__main__":
 
     # Create the Dataset object and load the data
     dataset = BrainTumorDataset()
-    dataset.load_data(config.DATA_PATH, config.INPUT_SHAPE, 7500)
+    dataset.load_data(config.DATA_PATH, config.INPUT_SHAPE, 5000)
     dataset.split_data(test_size=config.TEST_SPLIT, validation_size=config.VAL_SPLIT)
 
     # Create the model and train the model
     model = Model()
     model.train(dataset, config)
-
+    model.evaluate_test(dataset, config, to_csv=True)
+    model.visualize_patch_segmentation_predictions(dataset.X["validation"], dataset.y["validation"])
