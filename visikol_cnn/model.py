@@ -1,9 +1,8 @@
 import os
-import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
+import pandas as pd
 from keras.optimizers import Adam, SGD, RMSprop
-from keras.callbacks import ModelCheckpoint, LearningRateScheduler, CSVLogger
+from keras.callbacks import ModelCheckpoint, CSVLogger
 from sklearn.metrics import *
 from .networks import *
 from .utils import *
@@ -27,15 +26,17 @@ class Model:
     train(dataset, config)
         Used to build the keras Model and train the weights of the CNN on the dataset based on parameters specified
         by the config parameter.
-    evaluate_test(X_test, y_test, batch_size, to_csv=False, save_path='')
+    evaluate_test(dataset, config, to_csv=False)
         Evaluates the trained network on the test data using classification metrics or segmentation metrics depending on
         the output shape of the predicted data.
-    visualize_patch_segmentation_predictions(X, y=None, num_predictions=3)
-        Displays a number of random patch segmentation masks predicted by the model attribute of the class.
+    visualize_class_predictions(X, y=None, class_names=None, threshold=.5, num_predictions=3)
+        Displays class predictions for random images provided by X.
+    visualize_patch_segmentation_predictions(X, y=None, threshold=0.5, num_predictions=3)
+        Displays a number of random segmentation masks predicted by the trained model.
     visualize_full_segmentation_predictions(img, mask=None, threshold=.5)
         Displays an entire segmentation mask of an image larger than the input shape of the trained CNN by splitting
-        into patches, predicting the segmentation masks of the patches, and then reassembling the patches to the
-        original shape of the image.
+        the image into smaller patches that match the input shape of the model. The smaller patches are then reassembled
+        to the original size of the image.
 
     """
 
@@ -59,6 +60,7 @@ class Model:
 
         """
 
+        # Choose the CNN model
         if config.MODEL_NAME.lower() == 'u-net-small':
             self.model = unet_small(config.INPUT_SHAPE, config.NUM_CLASSES)
         elif config.MODEL_NAME.lower() == 'u-net':
@@ -109,24 +111,23 @@ class Model:
 
         return self.model.summary()
 
-    def train(self, dataset, config, train_generator=None, val_generator=None):
-        """Trains the CNN model attribute of the class on the dataset according to the configuration parameter.
+    def train(self, dataset, config):
+        """Trains the CNN model on the dataset according to the configuration parameter.
 
         Parameters
         ---------
         dataset : Dataset object
             Provides the training, testing, and validation data for training the CNN.
         config : Config object
-            Specifies the hyper-parameters of CNN for training including loss function and optimizer specifications.
-        generator : ImageGenerator object
-        val_generator : ImageGenerator object
+            Specifies the hyper-parameters of CNN for training including loss function and optimizer options.
 
         """
 
+        # Build the model from scratch if or else resume training with the current model
         if self.model is None:
             self.build_model(config)
         else:
-            print("Model already created")
+            print("\nModel already created. Resuming training. \n")
 
         # Create training directories
         config.create_training_directories()
@@ -141,20 +142,10 @@ class Model:
         # Set a callback to log training values to a CSV
         callbacks.append(CSVLogger(os.path.join(config.CSV_DIR, 'training.csv')))
 
-        # Set a callback to adjust the learning rate
-        if config.LR_SCHEDULER:
-            callbacks.append(LearningRateScheduler(schedule))
-
         # Train the model
-        if train_generator is None and val_generator is None:
-            self.model.fit(dataset.X["train"], dataset.y["train"], epochs=config.NUM_EPOCHS, callbacks=callbacks,
-                           validation_data=(dataset.X["validation"], dataset.y["validation"]),
-                           batch_size=config.BATCH_SIZE)
-        else:
-            self.model.fit_generator(train_generator, steps_per_epoch=train_generator.n // train_generator.batch_size,
-                                     validation_data=val_generator,
-                                     validation_steps=val_generator.n // val_generator.batch_size,
-                                     epochs=config.NUM_EPOCHS, callbacks=callbacks)
+        self.model.fit(dataset.X["train"], dataset.y["train"], epochs=config.NUM_EPOCHS, callbacks=callbacks,
+                       validation_data=(dataset.X["validation"], dataset.y["validation"]),
+                       batch_size=config.BATCH_SIZE)
 
     def evaluate_test(self, dataset, config, to_csv=False):
         """Measures the performance of the trained CNN on test data.
@@ -162,10 +153,11 @@ class Model:
         Parameters
         ----------
         dataset : Dataset Object
+            Contains the test or validation data
         config : Config Object
             Provides parameters for inference
         to_csv : bool, optional
-            If True, a csv file will be saved with the calculated metrics.
+            If True, a csv file will be saved to a CSV file with the calculated metrics and training parameters.
 
         Returns
         -------
@@ -174,6 +166,7 @@ class Model:
 
         """
 
+        # If the 'test' key of the X and y dicts are empty, perform the evaluation on the validation data.
         if dataset.X["test"].any() and dataset.y["test"].any():
             X_test = dataset.X["test"]
             y_test = dataset.y["test"]
@@ -181,7 +174,9 @@ class Model:
             X_test = dataset.X["validation"]
             y_test = dataset.y["validation"]
 
+        # Predict the data
         y_pred = self.model.predict(X_test, config.BATCH_SIZE)
+
         if y_test.ndim == 4:    # Segmentation
             score = {"BCE": binary_crossentropy_np(y_test, y_pred),
                      "Dice": dice_np(y_test, y_pred),
@@ -208,14 +203,11 @@ class Model:
         summary.update(score)
         df = pd.DataFrame(summary, index=['value'])
 
+        # Save to CSV
         if to_csv:
             df.to_csv(os.path.join(config.CSV_DIR, 'results.csv'))
 
         return df
-
-    def evaluate_test_generator(self, dataset, config, to_csv=False):
-        # TODO: Create this method
-        pass
 
     def visualize_class_predictions(self, X, y=None, class_names=None, threshold=.5, num_predictions=3):
         """Visualize randomly selected predictions for a CNN trained for classification.
@@ -235,9 +227,11 @@ class Model:
 
         """
 
+        # Choose random samples for visualization
         random_samples = np.random.randint(0, len(X), num_predictions)
-
         X_rand = X[random_samples]
+
+        # Predict the random samples
         y_pred = self.model.predict(X_rand)
         y_pred = np.squeeze(y_pred)
 
@@ -248,10 +242,14 @@ class Model:
         else:
             ValueError("Accepted dimensions are (n_samples, ) or (n_samples, n_classes).")
 
-        # TODO: only ten classes
+        # Make default class names if they are not provided.
         if class_names is None:
-            class_names = [i for i in range(10)]
+            if y_pred.ndim == 1:
+                class_names = ['Class {}'.format(i) for i in range(2)]
+            else:
+                class_names = ['Class {}'.format(i) for i in range(y_pred.shape[1])]
 
+        # Choose random ground truth samples if provided.
         if y is not None:
             y_rand = y[random_samples]
             if y_rand.ndim == 1:
@@ -261,6 +259,7 @@ class Model:
             else:
                 ValueError("Accepted dimensions are (n_samples, ) or (n_samples, n_classes).")
 
+        # Number of rows and columns for the figure
         ncols = min(num_predictions, 5)
         nrows = 1
         fig, axes = plt.subplots(nrows, ncols)
@@ -288,7 +287,8 @@ class Model:
         plt.show()
 
     def visualize_patch_segmentation_predictions(self, X, y=None, threshold=0.5, num_predictions=3):
-        """Visualize randomly selected predictions for a CNN trained for semantic segmentation.
+        """ Visualize randomly selected predictions for a CNN trained for semantic segmentation. Use this visualization
+            method when the input image is the same size as the input for the CNN.
 
         Parameters
         ----------
@@ -303,17 +303,17 @@ class Model:
 
         """
 
+        # Choose random samples
         random_samples = np.random.randint(0, len(X), num_predictions)
-
         X_rand = X[random_samples]
         y_pred = self.model.predict(X_rand)
 
+        # Number of rows and columsn for the figure
         ncols = 2
         nrows = num_predictions
         if y is not None:
             ncols = 3
             y_rand = y[random_samples]
-
         fig, axes = plt.subplots(nrows, ncols)
 
         for idx in range(num_predictions):
@@ -351,21 +351,21 @@ class Model:
             Threshold to use to convert predicted output to binary output.
         """
 
+        # Split the image into smaller patches that match the input size of the model
         X = Dataset.deconstruct_image(img, self.model.input_shape[1:])
         y_pred = self.model.predict(X)
-
         mask_pred = Dataset.reconstruct_image(y_pred, img.shape)
 
+        # Number of rows and columns for the figure
         ncols = 2
         nrows = 1
         if mask is not None:
             ncols = 3
-
         fig, axes = plt.subplots(nrows, ncols)
 
-        if img.shape[2] == 1:
+        if img.shape[2] == 1:   # grayscale
             axes[0].imshow(img[..., 0], cmap='gray')
-        else:
+        else:   # RGB
             axes[0].imshow(img)
         axes[0].set_xticks([])
         axes[0].set_yticks([])

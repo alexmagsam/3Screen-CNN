@@ -1,9 +1,7 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from imgaug import augmenters as iaa
 from sklearn.model_selection import train_test_split
 from keras import backend as K
-from skimage.measure import regionprops, label
 
 
 class Dataset:
@@ -89,7 +87,7 @@ class Dataset:
         pass
 
     @staticmethod
-    def augment_data(X, y, num_augment, masks=False, seq=None):
+    def augment_data(X, y, masks=False, seq=None):
         """Static method to augment training data.
 
         Important note: Use unsigned 8-bit format, this format is supported much better. Float values often yield
@@ -118,9 +116,8 @@ class Dataset:
 
         """
 
-        rand_repeated = np.random.randint(0, X.shape[0], num_augment)
-        aug_X = X[rand_repeated]
-        aug_y = y[rand_repeated]
+        if X.dtype != np.uint8:
+            raise TypeError("Input images must be 8-bit unsigned integer type.")
 
         # Create the augmentation sequence
         if seq is None:
@@ -129,11 +126,12 @@ class Dataset:
         seq_det = seq.to_deterministic()
 
         # Augment the data
-        aug_X = seq_det.augment_images(aug_X)
+        aug_X = seq_det.augment_images(X)
         if masks:
-            aug_y = seq_det.augment_images(aug_y)
-
-        return np.concatenate((X, aug_X), 0), np.concatenate((y, aug_y), 0)
+            aug_y = seq_det.augment_images(y)
+            return aug_X, aug_y
+        else:
+            return aug_X
 
     def split_data(self, test_size=None, validation_size=None):
         """Splits all of the data into training/testing or training/testing/validation data
@@ -154,7 +152,7 @@ class Dataset:
             split = True
         elif validation_size is not None and test_size is None:
             self.X["train"], self.X["validation"], self.y["train"], self.y["validation"] = \
-                train_test_split(self.X["all"], self.y["all"], test_size=test_size)
+                train_test_split(self.X["all"], self.y["all"], test_size=validation_size)
             split = True
         elif validation_size is not None and test_size is not None:
             self.X["train"], X_remainder, self.y["train"], y_remainder = \
@@ -348,7 +346,7 @@ smooth = 1.
 
 
 def precision_binary(y_true, y_pred):
-
+    # todo: add doc strings
     logical_and = K.cast(K.all(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     logical_or = K.cast(K.any(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     tp = K.sum(logical_and)
@@ -357,7 +355,7 @@ def precision_binary(y_true, y_pred):
 
 
 def recall_binary(y_true, y_pred):
-
+    # todo: add doc strings
     logical_and = K.cast(K.all(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     logical_or = K.cast(K.any(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     tp = K.sum(logical_and)
@@ -527,29 +525,6 @@ def dice_np(y_true, y_pred):
 
 
 ########################################################################################################################
-# Callbacks
-
-def schedule(epoch):
-    """Custom Keras callback for creating a schedule for the learning rate based on the current epoch.
-
-    Parameters
-    ----------
-    epoch : int
-        The current epoch during training.
-
-    Returns
-    -------
-    lr : float
-        The learning rate to be used for training.
-
-    """
-    if epoch < 5:
-        lr = .0001
-    else:
-        lr = .00001
-    return lr
-
-########################################################################################################################
 # Miscellaneous
 
 
@@ -563,6 +538,3 @@ def training_summary_dict(dataset, config):
 
 
 ########################################################################################################################
-
-
-
