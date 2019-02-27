@@ -26,15 +26,23 @@ pip install pandas==0.23.4
 pip install Pillow==5.3.0
 pip install scikit-image==0.14.1
 pip install scikit-learn==0.20.1
-pip install tensorflow-gpu==1.12.0
 pip install nibabel==2.3.3
+```
+
+To install TensorFlow:
+```
+pip install tensorflow==1.12.0
+```
+or with GPU support
+```
+pip install tensorflow-gpu==1.12.0
 ```
 
 There are several other steps to installing GPU-enabled Tensorflow. Follow the rest of the steps on https://www.tensorflow.org/install/ for GPU support.
 
 ### Project Organization
 ``` 
-am_cnn/ 
+visikol_cnn/ 
 ```
 The main module that contains all of the classes and functions for training a new CNN.
 ``` 
@@ -44,7 +52,7 @@ The default folder where all of the training logs and output csv files will save
 ``` 
 sample_scripts/ 
 ```
-Several scripts are given as examples on how to train a new CNN using the am_cnn module.
+Several scripts are given as examples on how to train a new CNN using the visikol_cnn module.
 ``` 
 sample_data/ 
 ```
