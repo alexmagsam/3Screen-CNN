@@ -250,7 +250,6 @@ def inceptionv3(input_shape, n_classes, weights='imagenet'):
     base_model = InceptionV3(include_top=False, weights=weights, input_shape=input_shape)
     x = base_model.output
     x = GlobalAveragePooling2D(name='avg_pool')(x)
-    # x = Dense(1024, activation='relu', name='dense')(x)
     if n_classes == 1:
         predictions = Dense(1, activation='sigmoid', name='predictions')(x)
     else:

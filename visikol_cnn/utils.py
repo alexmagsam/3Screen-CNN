@@ -1,15 +1,17 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from imgaug import augmenters as iaa
 from sklearn.model_selection import train_test_split
 from keras import backend as K
-from skimage.measure import regionprops, label
 
 
 class Dataset:
-    """A parent class used to store, organize, augment data used to train a CNN.
 
-    ...
+    X = {"all": np.array([]), "full": np.array([]), "train": np.array([]), "test": np.array([]), "validation": np.array([])}
+    y = {"all": np.array([]), "full": np.array([]), "train": np.array([]), "test": np.array([]), "validation": np.array([])}
+    label_map = {}
+    class_names = []
+
+    """ A parent class used to store, organize, augment data used to train a CNN.
 
     Attributes
     ----------
@@ -50,20 +52,20 @@ class Dataset:
     -------
     load_data(**kwargs)
         An abstract method that is meant to be overridden based on the specific that is being used.
-    augment_data(X, y, num_train, masks=False)
+    augment_data(X, y=None, seq=None)
         A static method that can be used to augment data for training.
+    split_data(test_size=None, validation_size=None)
+        A method that divides X["all"] and y["all"] into training, testing, and validation data.
     deconstruct_image(img, patch_shape)
         A static method that is used to break down a larger image into smaller patches.
     reconstruct_image(patch, image_shape)
-        A static method used to reconstruct a larger images form smaller patches.
+        A static method used to reconstruct a larger image from smaller patches.
+    extract_random_positive_patches(mask, patch_shape, num_patches, threshold=False, img=None, positive_only=True)
+        A static method to extract image patches or patch coordinates from a larger image.
+    extract_patches_from_list(img, bbox_list)
+        A static method to extract image patches from a larger image.
 
     """
-
-    X = {"all": np.array([]), "full": np.array([]), "train": np.array([]), "test": np.array([]), "validation": np.array([])}
-    y = {"all": np.array([]), "train": np.array([]), "test": np.array([]), "validation": np.array([])}
-    generator = {"train": None, "test": None, "validation": None}
-    label_map = {}
-    class_names = []
 
     def __init__(self):
         pass
@@ -78,18 +80,8 @@ class Dataset:
         """
         pass
 
-    def load_generator(self, **kwargs):
-        """A method to load data into the generator attribute of the subclass.
-
-        Parameters
-        ----------
-        **kwargs : dict
-            A dictionary containing parameters specific to the overridden function for loading data.
-        """
-        pass
-
     @staticmethod
-    def augment_data(X, y, num_augment, masks=False, seq=None):
+    def augment_data(X, y=None, seq=None):
         """Static method to augment training data.
 
         Important note: Use unsigned 8-bit format, this format is supported much better. Float values often yield
@@ -98,14 +90,10 @@ class Dataset:
         Parameters
         ----------
         X : ndarray
-            Training images with shape [n_samples, height, width, n_channels or n_classes].
-        y : ndarray
-            Ground truth array with shape [n_samples, height, width, n_classes] or
-            [n_samples, n_classes] or [n_samples].
-        num_augment : int
-            Amount of desired training data.
-        masks : bool, optional
-            Indicates whether the ground truth data are masks or not.
+            Training images with shape [n_samples, height, width, n_channels] of 8-bit unsigned integer type.
+        y : ndarray, None
+            Training masks that accompany the training images with shape [n_samples, height, width, n_channels] of 8-bit
+            unsigned integer type.
         seq : imgaug Sequential object
             A custom imgaug Sequential augmentation pipeline.
 
@@ -118,22 +106,24 @@ class Dataset:
 
         """
 
-        rand_repeated = np.random.randint(0, X.shape[0], num_augment)
-        aug_X = X[rand_repeated]
-        aug_y = y[rand_repeated]
+        if X.dtype != np.uint8:
+            raise TypeError("Input images must be 8-bit unsigned integer type.")
 
-        # Create the augmentation sequence
-        if seq is None:
+        # Create the default augmentation sequences
+        if seq is None and y is None:
             seq = iaa.Sequential([iaa.Fliplr(.5), iaa.ContrastNormalization((.8, 1.2)),
-                                  iaa.Add((-10, 10)), iaa.Multiply((.8, 1.1)), iaa.AdditiveGaussianNoise(scale=(0, 8))])
+                                  iaa.Add((-10, 10)), iaa.Multiply((.8, 1.1)), iaa.AdditiveGaussianNoise(scale=(0, 5))])
+        if seq is None and y is not None:
+            seq = iaa.Sequential([iaa.Fliplr(.5), iaa.Flipud(.5), iaa.Affine(translate_px=(-5, 5))])
         seq_det = seq.to_deterministic()
 
         # Augment the data
-        aug_X = seq_det.augment_images(aug_X)
-        if masks:
-            aug_y = seq_det.augment_images(aug_y)
-
-        return np.concatenate((X, aug_X), 0), np.concatenate((y, aug_y), 0)
+        aug_X = seq_det.augment_images(X)
+        if y is not None:
+            aug_y = seq_det.augment_images(y)
+            return aug_X, aug_y
+        else:
+            return aug_X
 
     def split_data(self, test_size=None, validation_size=None):
         """Splits all of the data into training/testing or training/testing/validation data
@@ -154,7 +144,7 @@ class Dataset:
             split = True
         elif validation_size is not None and test_size is None:
             self.X["train"], self.X["validation"], self.y["train"], self.y["validation"] = \
-                train_test_split(self.X["all"], self.y["all"], test_size=test_size)
+                train_test_split(self.X["all"], self.y["all"], test_size=validation_size)
             split = True
         elif validation_size is not None and test_size is not None:
             self.X["train"], X_remainder, self.y["train"], y_remainder = \
@@ -241,8 +231,7 @@ class Dataset:
         return img[:image_shape[0], :image_shape[1], :]
 
     @staticmethod
-    def extract_random_positive_patches(mask, patch_shape, num_patches, threshold=False, img=None, exit_density=False,
-                                        positive_only=True):
+    def extract_random_positive_patches(mask, patch_shape, num_patches, threshold=False, img=None, positive_only=True):
         """Extracts patches from an image only at locations where mask is True.
 
         Parameters
@@ -258,8 +247,6 @@ class Dataset:
             False, there only needs to be one true pixel.
         img : ndarray, None
             Image to extract the patches from.
-        exit_density : float, False
-            Future parameter for determining when to stop extracting patches.
         positive_only : bool, False
             Set False if you want to extract empty patches as well.
 
@@ -278,7 +265,7 @@ class Dataset:
         # Find indices where mask is True
         positive_idxs = np.transpose(mask.nonzero())
 
-        # Decide on output
+        # If an images is provided, return the extracted patches. Or else, returned a list of bounding boxes.
         if img is not None:
             patch = np.zeros((num_patches, patch_shape[0], patch_shape[1], img.shape[2], np.float32))
         else:
@@ -333,7 +320,23 @@ class Dataset:
 
     @staticmethod
     def extract_patches_from_list(img, bbox_list):
-        # TODO: add docstrings
+        """ Extract smaller image patches from a larger image and a list of bounding boxes output from the
+            extract_random_positive_patches() method.
+
+        Parameters
+        ----------
+        img : ndarray
+            Array of shape [height, width, n_channels]
+        bbox_list : list
+            List of lists where each sublist has the coordinates [x1, y1, x2, y2].
+
+        Returns
+        -------
+        patch : ndarray
+            Array of shape [len(bbox_list), patch_height, patch_width, n_channels]
+
+        """
+
         bbox = bbox_list[0]
         patch = np.zeros((len(bbox_list), bbox[3]-bbox[1], bbox[2]-bbox[0], img.shape[2]), img.dtype)
         for idx, bbox in enumerate(bbox_list):
@@ -348,6 +351,23 @@ smooth = 1.
 
 
 def precision_binary(y_true, y_pred):
+    """ Keras metric for computing precision for a binary classification task during training
+
+    Precision = true positives / (true positives + false positives)
+
+    Parameters
+    ----------
+    y_true : K.variable
+        Ground truth N-dimensional Keras variable of float type with only 0's and 1's.
+    y_pred : K.variable
+        Predicted Keras variable of float type with predicted values between 0 and 1.
+
+    Returns
+    -------
+    K.variable
+        A single value indicating the precision.
+
+    """
 
     logical_and = K.cast(K.all(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     logical_or = K.cast(K.any(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
@@ -357,6 +377,23 @@ def precision_binary(y_true, y_pred):
 
 
 def recall_binary(y_true, y_pred):
+    """ Keras metric for computing recall for a binary classification task during training
+
+        Recall = true positives / (true positives + false negatives)
+
+        Parameters
+        ----------
+        y_true : K.variable
+            Ground truth N-dimensional Keras variable of float type with only 0's and 1's.
+        y_pred : K.variable
+            Predicted Keras variable of float type with predicted values between 0 and 1.
+
+        Returns
+        -------
+        K.variable
+            A single value indicating the recall.
+
+    """
 
     logical_and = K.cast(K.all(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
     logical_or = K.cast(K.any(K.stack([K.cast(y_true, 'bool'), K.greater_equal(y_pred, 0.5)], axis=0), axis=0), 'float32')
@@ -527,42 +564,17 @@ def dice_np(y_true, y_pred):
 
 
 ########################################################################################################################
-# Callbacks
-
-def schedule(epoch):
-    """Custom Keras callback for creating a schedule for the learning rate based on the current epoch.
-
-    Parameters
-    ----------
-    epoch : int
-        The current epoch during training.
-
-    Returns
-    -------
-    lr : float
-        The learning rate to be used for training.
-
-    """
-    if epoch < 5:
-        lr = .0001
-    else:
-        lr = .00001
-    return lr
-
-########################################################################################################################
 # Miscellaneous
 
 
 def training_summary_dict(dataset, config):
     return {"date": config.DATE_STRING, "num train": len(dataset.X["train"]), "num test": len(dataset.X["test"]),
             "num validation": len(dataset.X["validation"]), "model name": config.MODEL_NAME,
-            "loss": config.LOSS, "optimizer": config.OPTIMIZER["name"], "learning rate": config.LEARNING_RATE,
-            "decay": config.OPTIMIZER["decay"], "momentum": config.OPTIMIZER["momentum"],
-            "epsilon": config.OPTIMIZER["epsilon"], "num epochs": config.NUM_EPOCHS,
-            "num classes": config.NUM_CLASSES}
+            'input height': config.INPUT_SHAPE[0], 'input width': config.INPUT_SHAPE[1],
+            'input channels': config.INPUT_SHAPE[2], "loss": config.LOSS, "optimizer": config.OPTIMIZER["name"],
+            "learning rate": config.LEARNING_RATE, "decay": config.OPTIMIZER["decay"],
+            "momentum": config.OPTIMIZER["momentum"], "epsilon": config.OPTIMIZER["epsilon"],
+            "num epochs": config.NUM_EPOCHS, "num classes": config.NUM_CLASSES}
 
 
 ########################################################################################################################
-
-
-
