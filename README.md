@@ -42,7 +42,7 @@ There are several other steps to installing GPU-enabled Tensorflow. Follow the r
 
 ### Project Organization
 ``` 
-visikol_cnn/ 
+cnn/ 
 ```
 The main module that contains all of the classes and functions for training a new CNN.
 ``` 
