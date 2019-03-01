@@ -7,9 +7,9 @@ from skimage.transform import resize
 
 sys.path.append('../')
 
-from visikol_cnn.config import Config
-from visikol_cnn.utils import Dataset
-from visikol_cnn.model import Model
+from cnn.config import Config
+from cnn.utils import Dataset
+from cnn.model import Model
 
 
 class SkinCancerConfig(Config):
