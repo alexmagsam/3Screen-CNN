@@ -3,7 +3,7 @@ There are three simple steps to using this module to train a CNN on a given data
 
 1. Create a configuration class that inheirits from the parent class ```Config``` and override the attributes.
 ```python
-from visikol_cnn.config import Config
+from cnn.config import Config
 
 class ExampleConfig(Config):
   DATA_PATH = '../Example Dataset'
@@ -14,7 +14,7 @@ class ExampleConfig(Config):
 
 2. Create a dataset class that inheirits from the parent class ```Dataset``` and override the ```load_data()``` method.
 ```python
-from visikol_cnn.utils import Dataset
+from cnn.utils import Dataset
 
 class ExampleDataset(Dataset):
   def load_data(self, path, input_shape):
@@ -35,7 +35,7 @@ class ExampleDataset(Dataset):
 3. Create a main function that creates a ```Dataset```, ```Config```, and ```Model``` object calls the ```train()``` method of the ```Model``` object.
 
 ```python
-from visikol_cnn.model import Model
+from cnn.model import Model
 
 if __name__ == "__main__":
   # Create the Config object
