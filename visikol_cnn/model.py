@@ -9,6 +9,9 @@ from .utils import *
 
 
 class Model:
+
+    model = None
+
     """
     A parent class used for training a CNN for image classification or semantic segmentation.
 
@@ -39,8 +42,6 @@ class Model:
         to the original size of the image.
 
     """
-
-    model = None
 
     def __init__(self):
         pass
@@ -137,7 +138,7 @@ class Model:
 
         # Set a  callback for the model to save checkpoints
         filename = 'model.{epoch:02d}-{val_loss:.2f}.hdf5'
-        callbacks.append(ModelCheckpoint(os.path.join(config.MODELS_DIR, filename), save_best_only=True))
+        callbacks.append(ModelCheckpoint(os.path.join(config.MODELS_DIR, filename)))
 
         # Set a callback to log training values to a CSV
         callbacks.append(CSVLogger(os.path.join(config.CSV_DIR, 'training.csv')))
@@ -308,7 +309,7 @@ class Model:
         X_rand = X[random_samples]
         y_pred = self.model.predict(X_rand)
 
-        # Number of rows and columsn for the figure
+        # Number of rows and columns for the figure
         ncols = 2
         nrows = num_predictions
         if y is not None:
@@ -316,25 +317,49 @@ class Model:
             y_rand = y[random_samples]
         fig, axes = plt.subplots(nrows, ncols)
 
-        for idx in range(num_predictions):
-            axes[idx, 0].imshow(X_rand[idx, :, :, 0], cmap='gray')
-            axes[idx, 0].set_xticks([])
-            axes[idx, 0].set_yticks([])
+        if num_predictions == 1:
+            if X_rand.shape[3] == 1:
+                axes[0].imshow(X_rand[0, :, :, 0], cmap='gray')
+            else:
+                axes[0].imshow(X_rand[0])
+            axes[0].set_xticks([])
+            axes[0].set_yticks([])
 
-            axes[idx, 1].imshow(y_pred[idx, :, :, 0] > threshold, cmap='gray')
-            axes[idx, 1].set_xticks([])
-            axes[idx, 1].set_yticks([])
+            axes[1].imshow(y_pred[0, :, :, 0] > threshold, cmap='gray')
+            axes[1].set_xticks([])
+            axes[1].set_yticks([])
 
-            if idx == 0:
-                axes[idx, 0].set_title("Original Image")
-                axes[idx, 1].set_title("Predicted Mask")
+            axes[0].set_title("Original Image")
+            axes[1].set_title("Predicted Mask")
 
             if y is not None:
-                axes[idx, 2].imshow(y_rand[idx, :, :, 0], cmap='gray')
-                axes[idx, 2].set_xticks([])
-                axes[idx, 2].set_yticks([])
+                axes[2].imshow(y_rand[0, :, :, 0], cmap='gray')
+                axes[2].set_xticks([])
+                axes[2].set_yticks([])
+                axes[2].set_title("Ground Truth Mask")
+        else:
+            for idx in range(num_predictions):
+                if X_rand.shape[3] == 1:
+                    axes[idx, 0].imshow(X_rand[idx, :, :, 0], cmap='gray')
+                else:
+                    axes[idx, 0].imshow(X_rand[idx])
+                axes[idx, 0].set_xticks([])
+                axes[idx, 0].set_yticks([])
+
+                axes[idx, 1].imshow(y_pred[idx, :, :, 0] > threshold, cmap='gray')
+                axes[idx, 1].set_xticks([])
+                axes[idx, 1].set_yticks([])
+
                 if idx == 0:
-                    axes[idx, 2].set_title("Ground Truth Mask")
+                    axes[idx, 0].set_title("Original Image")
+                    axes[idx, 1].set_title("Predicted Mask")
+
+                if y is not None:
+                    axes[idx, 2].imshow(y_rand[idx, :, :, 0], cmap='gray')
+                    axes[idx, 2].set_xticks([])
+                    axes[idx, 2].set_yticks([])
+                    if idx == 0:
+                        axes[idx, 2].set_title("Ground Truth Mask")
 
         plt.show()
 
@@ -380,7 +405,6 @@ class Model:
         axes[1].set_title("Predicted Mask")
 
         if mask is not None:
-            axes[1].set_title("Predicted - IoU = {0:.2f}".format(jaccard_np(mask, mask_pred)))
             if mask.shape[2] == 1:
                 axes[2].imshow(mask[..., 0], cmap='gray')
             else:

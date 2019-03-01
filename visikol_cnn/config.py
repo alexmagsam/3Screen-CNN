@@ -136,11 +136,11 @@ class Config:
         """ This method is called by the Model class in the train() method. It creates the directory structure in the logs
             folder for a given training session. The format is:
 
-            --LOGS_DIR
-                --SAVE_NAME
-                    --DATE_STRING
-                        --models
-                        --csv_files
+            --LOGS_DIR/
+                --SAVE_NAME/
+                    --DATE_STRING/
+                        --MODEL_DIR/
+                        --CSV_DIR/
 
         """
 
