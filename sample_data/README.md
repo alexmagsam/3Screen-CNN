@@ -63,3 +63,13 @@ he-gland-segmentation/
     testA_1_anno.bmp
     ...
 ```
+
+
+## Retina Vessel Segmentation
+### DRIVE: Digital Retinal Images for Vessel Extraction
+Follow the instructions at https://www.isi.uu.nl/Research/Databases/DRIVE/download.php to download the data set and extract to the folder ```retina-vessel-segmentation```. The resulting directory should contain:
+```
+retina-vessel-segmentation/
+  test/
+  training/
+```
