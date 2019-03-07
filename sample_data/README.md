@@ -49,3 +49,17 @@ brain-tumor-segmentation/
     LGG/
     survival_data.csv
 ```
+
+
+## H&E Gland Segmentation
+### GlaS@MICCAI'2015: Gland Segmentation Challenge Contest
+Download the dataset from https://warwick.ac.uk/fac/sci/dcs/research/tia/glascontest/download/ and extract to the folder ```he-gland-segmentation```. The resulting directory should contain:
+```
+he-gland-segmentation/
+  Warwick QU Dataset (Released 2016_07_08)/
+    .DS_Store
+    Grade.csv
+    testA_1.bmp
+    testA_1_anno.bmp
+    ...
+```
