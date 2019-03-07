@@ -8,7 +8,6 @@ skin-cancer-mnist/
   HAM10000_images_part_2/
   HAM10000_metadata.csv
 ```
-Any other files can be discarded. Extract the both of the sub-directories containing the image files.
 
 
 ## Chest X-Ray Images (Pneumonia)
@@ -26,7 +25,6 @@ chest-xray-pneumonia/
       NORMAL/
       PNEUMONIA/
 ```
-Discard all of the .DS_Store files.
 
 
 ## Ultrasound Nerve Segmentation
