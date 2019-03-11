@@ -12,7 +12,7 @@ from cnn.model import Model
 
 
 class BrainTumorConfig(Config):
-    DATA_PATH = r'A:\Deep Learning Datasets Temp\Brain Tumor Segmentation'
+    DATA_PATH = 'sample_data/brain-tumor-segmentation/MICCAI_BraTS_2018_Data_Training'
     INPUT_SHAPE = (240, 240, 1)
     SAVE_NAME = 'braintumor-unet-small-dice'
     LOSS = 'dice'

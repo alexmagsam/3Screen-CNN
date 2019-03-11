@@ -13,7 +13,7 @@ from cnn.utils import Dataset
 
 
 class GlandConfig(Config):
-    DATA_PATH = r'E:\Deep Learning Datasets\Gland Segmentation'
+    DATA_PATH = 'sample_data/he-gland-segmentation/Warwick QU Dataset (Released 2016_07_08)'
     SAVE_NAME = 'gland-unet-small-bce'
     LOSS = 'bce'
     LEARNING_RATE = .0001
@@ -86,23 +86,28 @@ class GlandDataset(Dataset):
         aug_X = [X]
         aug_y = [y]
 
+        # Flip 180 degree
         aug_X.append(np.rot90(X, k=2, axes=(1, 2)))
         aug_y.append(np.rot90(y, k=2, axes=(1, 2)))
 
+        # Reflection over y-axis
         aug_X.append(np.flip(X, axis=2))
         aug_y.append(np.flip(y, axis=2))
 
+        # Reflection over y-axis followed by reflection over x-axis
         aug_X.append(np.flip(np.flip(X, axis=2), axis=1))
         aug_y.append(np.flip(np.flip(y, axis=2), axis=1))
 
         aug_X = np.vstack(aug_X)
         aug_y = np.vstack(aug_y)
 
+        # Random rotations between -20 and 20 degrees
         sequential = iaa.Sequential([iaa.Affine(rotate=(-20, 20))])
         seq = sequential.to_deterministic()
         rotated_X = seq.augment_images(aug_X)
         rotated_y = seq.augment_images(aug_y)
 
+        # Random translations in the x and y directions by 75 pixels
         sequential = iaa.Sequential([iaa.Affine(translate_px={"x": (-75, 75), "y": (-75, 75)})])
         seq = sequential.to_deterministic()
         translated_X = seq.augment_images(aug_X)

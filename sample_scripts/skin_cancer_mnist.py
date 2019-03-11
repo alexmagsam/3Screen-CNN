@@ -13,7 +13,7 @@ from cnn.model import Model
 
 
 class SkinCancerConfig(Config):
-    DATA_PATH = 'E:\Deep Learning Datasets\skin-cancer-mnist'
+    DATA_PATH = 'sample_data/skin-cancer-mnist'
     INPUT_SHAPE = (256, 256, 3)
     SAVE_NAME = 'skincancer-vgg16-cce'
     LOSS = 'cce'
@@ -34,6 +34,7 @@ class SkinCancerDataset(Dataset):
     label_map = {'akiec': 0, 'bcc': 1, 'bkl': 2, 'df': 3, 'mel': 4, 'nv': 5, 'vasc': 6}
 
     def load_data(self, path, input_shape):
+        # Read the filenames from the CSV file
         df = pd.read_csv(os.path.join(path, 'HAM10000_metadata.csv'))
         files = np.array(df['image_id'].tolist())
         labels = np.array(df['dx'].tolist())
@@ -58,6 +59,7 @@ class SkinCancerDataset(Dataset):
             if (idx + 1) % 1000 == 0:
                 print("Loaded {} of {}".format(idx + 1, len(files)))
 
+        # Shuffle the images
         random_shuffle = np.arange(len(files))
         np.random.shuffle(random_shuffle)
 

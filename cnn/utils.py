@@ -267,7 +267,7 @@ class Dataset:
 
         # If an images is provided, return the extracted patches. Or else, returned a list of bounding boxes.
         if img is not None:
-            patch = np.zeros((num_patches, patch_shape[0], patch_shape[1], img.shape[2], np.float32))
+            patch = np.zeros((num_patches, patch_shape[0], patch_shape[1], img.shape[2]), np.float32)
         else:
             patch = []
 
