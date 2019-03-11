@@ -110,4 +110,5 @@ if __name__ == '__main__':
     model.train(dataset, config)
 
     # Evaulate the trained model and visualize some predictions made on the test set
+    model.evaluate_test(dataset, config, to_csv=True)
     model.visualize_patch_segmentation_predictions(dataset.X["test"], dataset.y["test"])

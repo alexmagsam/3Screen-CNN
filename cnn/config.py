@@ -33,7 +33,7 @@ class Config:
         A sub-directory in the training directory where the model files are stored. Generated automatically, do not override.
 
     WEIGHTS : str
-        The weights to begin training. Options are 'imagenet' or None. Imagenet weights can only be used with InceptionV3 or VGG16..
+        The weights to begin training. Options are 'imagenet' or None. Imagenet weights can only be used with InceptionV3 or VGG16.
 
     NUM_CLASSES : int
         The number of classes used in training.
@@ -52,8 +52,12 @@ class Config:
             jaccard' : Jaccard loss, which is based on the Jaccard index used for semantic segmentation.
 
     OPTIMIZER : dict
-        A dictionary the describes what optimizer to use along with parameters of the optimizer. See the default values
-        for the required fields in the dict.
+        A dictionary the describes what optimizer to use along with parameters of the optimizer. The dictionary must
+        contain the following fields:
+            name: The name of the optimizer. Valid options are: "Adam", "SGD", or "RMSProp".
+            decay: A parameter that decreases the learning rate with each training step. Reference the decay equation used for Keras.
+            momentum: Used in the SGD and RMSProp optimizer to speed up training. Typical values include 0.9-0.99.
+            epsilon: A hyper-parameter to the optimizer that generally remains close to or at zero.
 
     NUM_EPOCHS : int
         The number of epochs during training.
