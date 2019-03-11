@@ -54,3 +54,39 @@ if __name__ == "__main__":
   model.visualize_class_predictions(dataset.X["validation"], dataset.y["validation"])
   
 ```
+
+## Chest X-Ray Images (Pneumonia)
+This script trains the InceptionV3 architecture to perform binary classification on Chest X-Ray images.
+
+![Image of Prediction](../images/chest-xray-pneumonia.png)
+
+
+## Skin Cancer MNIST: HAM10000
+This script trains the VGG16 architecture to perform multi-class classifcation on images if different skin-lesions,
+
+![Image of Prediction](../images/skin-cancer-mnist.png)
+
+
+## Ultrasound Nerve Segmentation
+This script trains a smaller version of U-Net to perform binary segmentation on ultrasound images contain a particular nerve of interest.
+
+![Image of Prediction](../images/ultrasound-nerve-segmentation.png)
+
+
+## Brain Tumor Segmentation
+This script trains a smaller version of U-Net to perform binary segmentation on brain MRI images containing tumors. This dataset is annotated as a multi-class dataset, however for simplicity the labels are combined into one class. I'd encourage you to try training with one class, then afterwords replace the last layer with a new layer with the correct number of classes, and retrain using the initial dataset using the original labels.
+
+![Image of Prediction](../images/brain-tumor-segmentation.png)
+
+
+## H&E Gland Segmentation
+This script trains a smaller version of U-Net to perform binary segmentation on H&E stained images containing gland structures. This dataset is especially tricky due to its small size. Augmentation helps tremendously to increase training sample size. A cross-entropy loss works much better when training from scratch, while a dice loss will usually cause the network to learn to classify all pixels in the image as a gland. When training from scratch, use a cross-entropy loss and then fine-tune your model by recompiling with a dice loss and then resuming training.
+
+![Image of Prediction](../images/gland-segmentation.png)
+
+
+## Retina Vessel Segmentation
+This script trains a smaller version of U-Net to perform binary segmentation on color fundus images of the retina containing blood vessels. I have found that input size of the network plays an important role during training where any size less than 256x256 has hard time learning. The original images are bigger than 256x256 and there is only ~20 of them. Therefore, random image patches are extracted from each full-size image to create the training set. The test images are deconstructed into patches as well, but not randomly.
+
+![Image of Prediction](../images/retina-vessel-segmentation.png)
+
