@@ -177,7 +177,7 @@ class Dataset:
 
         """
         pad_y = 0 if img.shape[0] % patch_shape[0] == 0 else patch_shape[0] - img.shape[0] % patch_shape[0]
-        pad_x = 0 if img.shape[1] % patch_shape[1] == 0 else patch_shape[1] - img.shape[1] % patch_shape[0]
+        pad_x = 0 if img.shape[1] % patch_shape[1] == 0 else patch_shape[1] - img.shape[1] % patch_shape[1]
         img = np.pad(img, ((0, pad_y), (0, pad_x), (0, 0)), 'constant')
 
         n_y = int(img.shape[0] / patch_shape[0])
