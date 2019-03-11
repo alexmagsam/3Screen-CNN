@@ -12,7 +12,7 @@ from cnn.model import Model
 
 
 class XRayConfig(Config):
-    DATA_PATH = 'A:\Deep Learning Datasets Temp\Pneumonia Detection'
+    DATA_PATH = 'sample_data/chest-xray-pneumonia'
     INPUT_SHAPE = (512, 512, 3)
     SAVE_NAME = 'xray-inceptionv3-bce'
     LOSS = 'bce'

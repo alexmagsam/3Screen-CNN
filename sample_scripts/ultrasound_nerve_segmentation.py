@@ -12,7 +12,7 @@ from cnn.model import Model
 
 
 class UltrasoundConfig(Config):
-    DATA_PATH = r'E:\Deep Learning Datasets\Ultrasound Nerve Segmentation'
+    DATA_PATH = 'sample_data/ultrasound-nerve-segmentation'
     INPUT_SHAPE = (256, 256, 1)
     SAVE_NAME = 'ultrasound-unet-small-dice'
     LOSS = 'dice'
@@ -29,6 +29,8 @@ class UltrasoundConfig(Config):
 class UltrasoundDataset(Dataset):
 
     def load_data(self, path, input_shape, nonzero_only=False):
+
+        # Load all of the images
 
         print('-'*100)
         print("Loading Images\n")
@@ -50,8 +52,10 @@ class UltrasoundDataset(Dataset):
             if (idx + 1) % 1000 == 0:
                 print("Loaded {} of {}".format(idx + 1, len(files)))
 
+        # Resizing the masks often creates values other than 0 or 1
         self.y["all"][self.y["all"] > 0] = 1
 
+        # The option to train on non-empy masks only
         if nonzero_only:
             nonzero_samples = np.unique(np.nonzero(self.y["all"])[0])
             print("\nNumber of nonzero samples: ", nonzero_samples.size)
