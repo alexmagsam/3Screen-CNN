@@ -2,7 +2,7 @@
 A Python 3 and Keras library for training convolutional neural networks for image classification and semantic segmentation.
 
 ## Prequesites
-
+* Python 3.5 or 3.6
 * Tensorflow
 * Keras
 * NumPy
