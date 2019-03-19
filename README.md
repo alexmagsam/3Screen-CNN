@@ -1,5 +1,5 @@
 # 3Screen-CNN
-A module built with Python 3 and Keras to train convolutional neural networks for image classification and image segmentation. 
+A Python 3 and Keras library for training convolutional neural networks for image classification and semantic segmentation.
 
 ## Prequesites
 
