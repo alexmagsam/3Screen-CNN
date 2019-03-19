@@ -52,8 +52,8 @@ The default folder where all of the training logs and output csv files will save
 ``` 
 sample_scripts/ 
 ```
-Several scripts are given as examples on how to train a new CNN using the visikol_cnn module.
+Several scripts are given as examples on how to train a new CNN using the cnn module.
 ``` 
 sample_data/ 
 ```
-Sample data sets that are used in conjuction with the sample scripts that are provided. 
+Several publically available biomedical datasets that are used in conjuction with the sample scripts. 
